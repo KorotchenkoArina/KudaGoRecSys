@@ -1,0 +1,30 @@
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.log
+.envcd
+*.pkl
+*.json
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.npy
+
+# IDE - Visual Studio Code
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Другие IDE
+.idea/
+*.swp
+*.swo
+*~
