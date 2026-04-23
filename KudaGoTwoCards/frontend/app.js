@@ -14,6 +14,12 @@ const resultsArea = document.getElementById('resultsArea');
 const comparisonsCountElement = document.getElementById('comparisonsCount');
 const resetBtn = document.getElementById('resetBtn');
 const continueBtn = document.getElementById('continueBtn');
+const profileBtn = document.getElementById('profileBtn');
+const likesBtn = document.getElementById('likesBtn');
+const likesArea = document.getElementById('likesArea');
+const likesCountElement = document.getElementById('likesCount');
+const backToComparisonBtn = document.getElementById('backToComparisonBtn');
+const likedEventsGrid = document.getElementById('likedEventsGrid');
 
 // ============================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -98,8 +104,8 @@ async function loadStats() {
         const response = await fetch(`${API_BASE}/user/profile`);
         const data = await response.json();
         if (data.success) {
-            comparisonsCount = data.total_choices;  // ← берем с сервера
-            comparisonsCountElement.textContent = comparisonsCount;
+            comparisonsCount = data.total_choices;  // Оставляем для других частей интерфейса (панель профиля)
+            likesCountElement.textContent = data.liked_count || 0; // Обновляем новый счетчик лайков
         }
     } catch (error) {
         console.error('Ошибка загрузки статистики:', error);
@@ -573,11 +579,89 @@ async function showUserProfile() {
 }
 
 /**
+ * Управляет отображением основных экранов приложения.
+ * @param {'comparison' | 'results' | 'likes'} viewName Имя экрана для показа
+ */
+function showView(viewName) {
+    // Сначала скрываем все экраны
+    comparisonArea.style.display = 'none';
+    resultsArea.style.display = 'none';
+    likesArea.style.display = 'none';
+
+    // Затем показываем нужный
+    if (viewName === 'comparison') {
+        comparisonArea.style.display = 'flex';
+    } else if (viewName === 'results') {
+        resultsArea.style.display = 'block';
+    } else if (viewName === 'likes') {
+        likesArea.style.display = 'block';
+    }
+}
+
+/**
+ * Показывает страницу с лайкнутыми событиями
+ */
+async function showLikesPage() {
+    showView('likes');
+    likedEventsGrid.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Загружаем ваши лайки...</p>
+        </div>
+    `;
+
+    try {
+        // Этот эндпоинт мы создадим на бэкенде следующим шагом
+        const response = await fetch(`${API_BASE}/user/liked-events`);
+        const data = await response.json();
+
+        if (data.success && data.liked_events.length > 0) {
+            likedEventsGrid.innerHTML = data.liked_events.map(event => `
+                <div class="recommendation-card" onclick="window.open('${event.url}', '_blank')">
+                    <div class="recommendation-image" style="background-image: url('${event.image}')">
+                    </div>
+                    <div class="recommendation-content">
+                        <h4 class="recommendation-title">${escapeHtml(event.title)}</h4>
+                        <div class="recommendation-place">
+                            <span>📍</span>
+                            <span>${escapeHtml(event.place)}</span>
+                        </div>
+                        <div class="recommendation-date">
+                            <span>📅</span>
+                            <span>${formatDate(event.date)}</span>
+                        </div>
+                        <div class="recommendation-price">
+                            <span>💰</span>
+                            <span>${escapeHtml(event.price)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            likedEventsGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🤔</div>
+                    <p class="empty-state-text">У вас пока нет лайков.</p>
+                    <p class="empty-state-subtext">Начните сравнивать события, чтобы составить свою коллекцию!</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки лайкнутых событий:', error);
+        likedEventsGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <p class="empty-state-text">Ошибка загрузки данных</p>
+            </div>
+        `;
+    }
+}
+
+/**
  * Показать рекомендации (список)
  */
 async function showRecommendations() {
-    comparisonArea.style.display = 'none';
-    resultsArea.style.display = 'block';
+    showView('results');
     
     try {
         const response = await fetch(`${API_BASE}/recommendations`);
@@ -637,11 +721,9 @@ async function resetGame() {
     if (confirm('Сбросить все сравнения и начать заново?')) {
         try {
             await fetch(`${API_BASE}/reset`, { method: 'POST' });
-            comparisonsCount = 0;
-            comparisonsCountElement.textContent = '0';
+            await loadStats(); // Обновляем все счетчики
             
-            comparisonArea.style.display = 'flex';
-            resultsArea.style.display = 'none';
+            showView('comparison'); // Возвращаемся на главный экран
             
             await loadComparisonPair();
             showMessage('Все данные сброшены! Начинаем заново 🎯', 'success');
@@ -870,6 +952,9 @@ async function init() {
 
     
     resetBtn.addEventListener('click', resetGame);
+    profileBtn.addEventListener('click', showUserProfile);
+    likesBtn.addEventListener('click', showLikesPage);
+    backToComparisonBtn.addEventListener('click', () => showView('comparison'));
     setupKeyboardShortcuts();
     
     

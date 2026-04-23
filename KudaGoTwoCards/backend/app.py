@@ -479,6 +479,25 @@ def get_user_profile():
         'message': 'Профиль не найден'
     })
 
+@app.route('/api/user/liked-events', methods=['GET'])
+def get_liked_events():
+    """Возвращает список событий, которые пользователь лайкнул."""
+    user_id = get_or_create_user_session()
+    profile = recommendation_system.get_user_profile(user_id)
+    liked_ids = profile.get('liked_events', [])
+    
+    # Реверсируем, чтобы новые лайки были вверху
+    liked_ids.reverse()
+    
+    # Загружаем актуальные события
+    all_events = load_or_refresh_cache()
+    events_dict = {event['id']: event for event in all_events}
+    
+    # Находим полные данные для лайкнутых событий, сохраняя порядок
+    liked_events_details = [events_dict[id] for id in liked_ids if id in events_dict]
+    
+    return jsonify({'success': True, 'liked_events': liked_events_details})
+
 @app.route('/api/debug/console', methods=['POST'])
 def debug_console():
     data = request.json

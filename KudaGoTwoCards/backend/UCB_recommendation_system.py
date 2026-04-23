@@ -71,9 +71,9 @@ class LinearUCB:
     
     def update(self, features, reward):
         """
-        Обновляет модель на основе фидбека
+        Обновляет модель на основе фидбека (ОПТИМИЗИРОВАННАЯ ВЕРСИЯ)
         features: вектор признаков события
-        reward: 1 (лайк) или 0 (дизлайк)
+        reward: 1 (лайк) или -1 (дизлайк)
         """
         features = np.array(features).reshape(-1, 1)
         
@@ -82,9 +82,17 @@ class LinearUCB:
         
         # Обновляем b = b + reward * x
         self.b += reward * features.flatten()
+
+        # ОПТИМИЗАЦИЯ: Обновляем A_inv с помощью формулы Шермана-Моррисона
+        # Это на порядки быстрее, чем инвертировать матрицу заново.
+        # Сложность O(d^2) вместо O(d^3).
+        A_inv_dot_x = np.dot(self.A_inv, features)
+        numerator = np.dot(A_inv_dot_x, A_inv_dot_x.T)
+        denominator = 1 + np.dot(features.T, A_inv_dot_x)
+        self.A_inv -= numerator / denominator
         
-        # Пересчитываем theta
-        self._update_theta()
+        # Обновляем theta с новым A_inv
+        self.theta = np.dot(self.A_inv, self.b)
         
         self.total_updates += 1
         self.reward_history.append(reward)
@@ -436,6 +444,14 @@ class LinearUCBRecommendationSystem:
         self.bandits = {}
         self.user_profiles = {}
         
+        # Инициализация глобального бандита для решения "холодного старта"
+        self.global_bandit = LinearUCB(
+            n_features=self.feature_dim,
+            alpha=self.alpha,
+            lambda_reg=self.lambda_reg
+        )
+        self.load_global_bandit()
+
         print(f"✅ Инициализирована LinearUCB система")
         print(f"   Размерность признаков: {self.feature_dim}")
         print(f"   - Эмбеддинги текста: 384")
@@ -444,15 +460,76 @@ class LinearUCBRecommendationSystem:
         print(f"   - Популярность: 3")
         print(f"   - Время и дата: 14")
         print(f"   - Резерв: {self.feature_dim - 436}")
+
+    def load_global_bandit(self):
+        """Загружает состояние глобального бандита."""
+        bandit_file = 'bandit_state_global.npz'
+        if os.path.exists(bandit_file):
+            try:
+                data = np.load(bandit_file)
+                self.global_bandit.A = data['A']
+                self.global_bandit.b = data['b']
+                self.global_bandit._update_theta()
+                print("✅ Глобальный бандит загружен с диска.")
+            except Exception as e:
+                print(f"⚠️ Ошибка загрузки глобального бандита: {e}")
+
+    def save_global_bandit(self):
+        """Сохраняет состояние глобального бандита."""
+        bandit_file = 'bandit_state_global.npz'
+        try:
+            np.savez(bandit_file, A=self.global_bandit.A, b=self.global_bandit.b)
+        except Exception as e:
+            print(f"⚠️ Ошибка сохранения глобального бандита: {e}")
+
+    def load_bandit(self, user_id):
+        """Загружает состояние бандита для пользователя."""
+        bandit_file = f'bandit_state_{user_id}.npz'
+        if os.path.exists(bandit_file):
+            try:
+                data = np.load(bandit_file, allow_pickle=True)
+                bandit = LinearUCB(
+                    n_features=self.feature_dim,
+                    alpha=self.alpha,
+                    lambda_reg=self.lambda_reg
+                )
+                bandit.A = data['A']
+                bandit.b = data['b']
+                bandit._update_theta()
+                self.bandits[user_id] = bandit
+                print(f"✅ Бандит для пользователя {user_id} загружен с диска.")
+                return True
+            except Exception as e:
+                print(f"⚠️ Ошибка загрузки бандита {user_id}: {e}")
+        return False
+
+    def save_bandit(self, user_id):
+        """Сохраняет состояние бандита для пользователя."""
+        if user_id in self.bandits:
+            bandit = self.bandits[user_id]
+            bandit_file = f'bandit_state_{user_id}.npz'
+            try:
+                np.savez(bandit_file, A=bandit.A, b=bandit.b)
+            except Exception as e:
+                print(f"⚠️ Ошибка сохранения бандита {user_id}: {e}")
     
     def get_bandit(self, user_id):
-        """Получает или создает экземпляр LinearUCB для пользователя"""
+        """Получает или создает экземпляр LinearUCB для пользователя."""
         if user_id not in self.bandits:
-            self.bandits[user_id] = LinearUCB(
-                n_features=self.feature_dim,
-                alpha=self.alpha,
-                lambda_reg=self.lambda_reg
-            )
+            # 1. Пытаемся загрузить бандита с диска
+            if not self.load_bandit(user_id):
+                # 2. Если не вышло (новый пользователь), создаем бандита на основе глобальной модели
+                print(f"Новый пользователь {user_id}. Инициализация из глобальной модели (warm start).")
+                new_bandit = LinearUCB(
+                    n_features=self.feature_dim,
+                    alpha=self.alpha,
+                    lambda_reg=self.lambda_reg
+                )
+                # Копируем знания из глобальной модели
+                new_bandit.A = np.copy(self.global_bandit.A)
+                new_bandit.b = np.copy(self.global_bandit.b)
+                new_bandit._update_theta() # Пересчитываем theta и A_inv
+                self.bandits[user_id] = new_bandit
         return self.bandits[user_id]
     
     def get_user_profile(self, user_id):
@@ -496,12 +573,10 @@ class LinearUCBRecommendationSystem:
                 print(f"Ошибка сохранения профиля: {e}")
     
     def reset_user_profile(self, user_id):
-        """Полностью сбрасывает профиль пользователя"""
+        """Полностью сбрасывает профиль пользователя и его модель."""
         # Удаляем из памяти
         if user_id in self.user_profiles:
             del self.user_profiles[user_id]
-        
-        # Удаляем из бандитов
         if user_id in self.bandits:
             del self.bandits[user_id]
         
@@ -514,8 +589,8 @@ class LinearUCBRecommendationSystem:
             except Exception as e:
                 print(f"Ошибка удаления профиля: {e}")
         
-        # Удаляем файл бандита (если есть)
-        bandit_file = f'bandit_{user_id}_state.json'
+        # Удаляем файл состояния бандита
+        bandit_file = f'bandit_state_{user_id}.npz'
         if os.path.exists(bandit_file):
             try:
                 os.remove(bandit_file)
@@ -532,7 +607,7 @@ class LinearUCBRecommendationSystem:
         
         event_id = event['id']
         
-        # Дизлайкнутое событие не обрабатываем
+        # Не обрабатываем события, которые уже были дизлайкнуты
         if event_id in profile['disliked_events']:
             return
         
@@ -547,15 +622,21 @@ class LinearUCBRecommendationSystem:
             profile['embedding'] = current_embedding.tolist()
         
         current_embedding = np.array(current_embedding, dtype=np.float32)
-        features = self.feature_extractor.extract_all_features(event, profile_embedding=current_embedding)
+        features = self.feature_extractor.extract_all_features(event)
         event_embedding = self.feature_extractor.get_text_embedding(event)
         
-        # Бандит обновляем ВСЕГДА (и для повторных лайков тоже!)
-        bandit.update(features, reward=1 if liked else 0)
+        # Обновляем модели, используя награду -1 для дизлайков
+        reward = 1 if liked else -1
+        bandit.update(features, reward=reward)
+        self.global_bandit.update(features, reward=reward)
+
+        # Сохраняем состояние бандитов на диск
+        self.save_bandit(user_id)
+        self.save_global_bandit()
         
-        # Если повторный лайк - эмбеддинг не меняем
+        # Если это повторный лайк, дальше профиль не обновляем
         if is_duplicate_like:
-            print(f"📊 Повторный лайк: {event_id}, бандит обновлен")
+            print(f"📊 Повторный лайк: {event_id}, бандиты обновлены и сохранены.")
             return
         
         total_choices = profile['total_choices']
@@ -569,34 +650,26 @@ class LinearUCBRecommendationSystem:
             # ВРЕМЕННАЯ ОТЛАДКА
             print(f"\n🔥 ЛАЙК: {event['title'][:50]}...")
             print(f"   alpha={alpha:.4f}")
-            print(f"   norm_old={np.linalg.norm(current_embedding):.4f}")
-            print(f"   norm_new={np.linalg.norm(new_embedding):.4f}")
-            print(f"   event_embedding_norm={np.linalg.norm(event_embedding):.4f}")
             
             for cat in event.get('categories', []):
                 profile['preferences'][cat] = profile['preferences'].get(cat, 0) + 1
         else:
             # Дизлайк
             if event_id in profile['liked_events']:
-                # Лайк → дизлайк (отменяем лайк)
-                alpha = 1.1 / (total_choices + 2)
+                # Случай, когда пользователь отменяет свой лайк
+                alpha = 1.1 / (total_choices + 2) # Увеличиваем "вес" отмены
                 new_embedding = current_embedding - alpha * event_embedding
                 profile['liked_events'].remove(event_id)
                 for cat in event.get('categories', []):
                     profile['preferences'][cat] = max(0, profile['preferences'].get(cat, 0) - 1)
             else:
-                # Новый дизлайк
-                alpha = 0.1 / (total_choices + 2)
+                # Обычный дизлайк нового события
+                alpha = 0.1 / (total_choices + 2) # Уменьшаем "вес", чтобы не портить профиль
                 new_embedding = current_embedding - alpha * event_embedding
-                # ВРЕМЕННАЯ ОТЛАДКА
-                print(f"\n❌ ДИЗЛАЙК: {event['title'][:50]}...")
-                print(f"   alpha={alpha:.4f}")
-                print(f"   norm_old={np.linalg.norm(current_embedding):.4f}")
-                print(f"   norm_new={np.linalg.norm(new_embedding):.4f}")
             
             profile['disliked_events'].append(event_id)
         
-        # Нормализуем эмбеддинг
+        # Нормализуем эмбеддинг профиля
         norm = np.linalg.norm(new_embedding)
         profile['embedding'] = (new_embedding / norm).tolist() if norm > 0 else np.zeros(384).tolist()
         
@@ -604,52 +677,54 @@ class LinearUCBRecommendationSystem:
         self.user_profiles[user_id] = profile
         self.save_user_profile(user_id)
     
-    def get_recommendations(self, user_id, events, n=2):
+    def get_recommendations(self, user_id, events, n=20):
         """
         Возвращает топ-n событий на основе UCB score.
-        UCB сам балансирует exploration и exploitation!
         """
         bandit = self.get_bandit(user_id)
         profile = self.get_user_profile(user_id)
         
-        # Получаем эмбеддинг профиля
-        profile_embedding = profile.get('embedding')
+        # Получаем эмбеддинг профиля для передачи в feature extractor
+        profile_embedding = np.array(profile.get('embedding'))
 
-        # Фильтруем дизлайкнутые события
-        available_events = [
-            e for e in events 
-            if e['id'] not in profile['disliked_events']
-        ]
+        # Фильтруем события, которые пользователь уже видел (лайкнул ИЛИ дизлайкнул)
+        seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+        available_events = [e for e in events if e['id'] not in seen_ids]
         
         if len(available_events) < n:
-            return available_events
+            n = len(available_events)
         
+        if not available_events:
+            return []
+
         # Вычисляем UCB score для каждого события
         scored_events = []
         for event in available_events:
-            features = self.feature_extractor.extract_all_features(event, profile_embedding)
+            features = self.feature_extractor.extract_all_features(event)
             score, mean_reward, uncertainty = bandit.get_score(features)
-            # score = mean_reward + alpha * uncertainty
-            # где:
-            # - mean_reward: насколько событие похоже на профиль (exploitation)
-            # - uncertainty: насколько мы неуверены (exploration)
             
-            scored_events.append((event, score, mean_reward, uncertainty, features))
+            scored_events.append({
+                'event': event,
+                'score': score,
+                'mean_reward': mean_reward,
+                'uncertainty': uncertainty,
+                'features': features
+            })
         
         # Сортируем по UCB score
-        scored_events.sort(key=lambda x: x[1], reverse=True)
+        scored_events.sort(key=lambda x: x['score'], reverse=True)
         
-        # Возвращаем топ-n
+        # Формируем итоговый список
         recommendations = []
-        for event, score, mean_reward, uncertainty, features in scored_events[:n]:
-            event = event.copy()
-            event['_ucb_score'] = float(score)
-            event['_expected_reward'] = float(mean_reward)
-            event['_uncertainty'] = float(uncertainty)
-            event['_confidence'] = float(bandit.get_confidence(features))
+        for item in scored_events[:n]:
+            event = item['event'].copy()
+            event['_ucb_score'] = float(item['score'])
+            event['_expected_reward'] = float(item['mean_reward'])
+            event['_uncertainty'] = float(item['uncertainty'])
+            event['_confidence'] = float(bandit.get_confidence(item['features']))
+            event['_features'] = item['features'] # Сохраняем для расчета разнообразия
             
-            # Определяем тип рекомендации
-            if uncertainty > abs(mean_reward):
+            if item['uncertainty'] > abs(item['mean_reward']) * 0.8: # Более мягкое условие для exploration
                 event['_recommendation_type'] = 'exploration'
             else:
                 event['_recommendation_type'] = 'exploitation'
@@ -660,46 +735,50 @@ class LinearUCBRecommendationSystem:
 
     def get_pair_for_comparison(self, user_id, all_events):
         """
-        Возвращает пару событий для сравнения.
-        Показывает топ-1 и топ-2 по UCB score.
+        Возвращает пару РАЗНООБРАЗНЫХ событий для сравнения.
+        Одно событие - "лидер" по UCB-оценке.
+        Второе - наиболее не похожее на лидера из топ-20.
         """
-        profile = self.get_user_profile(user_id)
+        # 1. Получаем топ-20 кандидатов, отфильтрованных по лайкам/дизлайкам
+        candidates = self.get_recommendations(user_id, all_events, n=20)
         
-        # Получаем ID дизлайкнутых событий
-        disliked_ids = set(profile.get('disliked_events', []))
-        
-        # Отладка
-        print(f"🔍 get_pair_for_comparison: всего событий={len(all_events)}, дизлайкнуто={len(disliked_ids)}")
-        
-        # Фильтруем дизлайкнутые события
-        available_events = [
-            e for e in all_events 
-            if e['id'] not in disliked_ids
-        ]
-        
-        print(f"   доступно после фильтрации: {len(available_events)}")
-        
-        if len(available_events) < 2:
-            print(f"⚠️ Недостаточно событий после фильтрации!")
+        if len(candidates) < 2:
+            print(f"⚠️ Недостаточно кандидатов для формирования разнообразной пары ({len(candidates)} шт.)")
+            # Fallback на случайные, если есть хотя бы 2
+            profile = self.get_user_profile(user_id)
+            seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+            available = [e for e in all_events if e['id'] not in seen_ids]
+            if len(available) >= 2:
+                return np.random.choice(available, 2, replace=False).tolist()
             return None, None
+
+        # 2. Первое событие в паре - это всегда лидер
+        leader = candidates[0]
         
-        # Получаем топ-2 события по UCB score
-        recommendations = self.get_recommendations(user_id, available_events, n=2)
+        # 3. Ищем второго кандидата, максимально не похожего на лидера
+        diverse_candidate = None
+        max_distance = -1
         
-        print(f"   получено рекомендаций: {len(recommendations)}")
+        leader_features = leader['_features']
         
-        if len(recommendations) >= 2:
-            print(f"   возвращаем топ-1 и топ-2")
-            return recommendations[0], recommendations[1]
+        for candidate in candidates[1:]:
+            candidate_features = candidate['_features']
+            # Косинусное расстояние = 1 - косинусное сходство
+            # Используем эмбеддинги (первые 384 признака) для расчета содержательного сходства
+            distance = 1 - np.dot(leader_features[:384], candidate_features[:384])
+            
+            if distance > max_distance:
+                max_distance = distance
+                diverse_candidate = candidate
         
-        # Fallback: случайные события из доступных
-        import random
-        if len(available_events) >= 2:
-            selected = random.sample(available_events, 2)
-            print(f"   fallback: случайные события")
-            return selected[0], selected[1]
+        print(f"↔️ Сформирована разнообразная пара. Расстояние: {max_distance:.3f}")
         
-        return None, None
+        # Очищаем временные поля перед отправкой
+        del leader['_features']
+        if diverse_candidate and '_features' in diverse_candidate:
+             del diverse_candidate['_features']
+
+        return leader, diverse_candidate
     
 
     def get_model_insights(self, user_id):
