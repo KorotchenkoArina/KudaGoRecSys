@@ -1423,3 +1423,178 @@ body {
         transform: translate(-50%, -50%) scale(1.5);
     }
 }
+
+.btn-cosine {
+    background: linear-gradient(135deg, #2196f3, #1976d2);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s;
+    margin-left: 10px;
+}
+
+.btn-cosine:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+}
+
+.cosine-area {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.btn-back {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 20px;
+    transition: all 0.3s;
+}
+
+.btn-back:hover {
+    background: #5a6268;
+    transform: translateY(-2px);
+}
+
+.similarity-badge {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    color: white;
+    z-index: 2;
+}
+
+.recommendation-image {
+    position: relative;
+}
+
+.recommendation-similarity {
+    font-size: 12px;
+    color: #666;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Пустое состояние с прогрессом */
+.empty-state-subtext {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.progress-mini {
+    max-width: 300px;
+    margin: 20px auto 0;
+    text-align: center;
+}
+
+.progress-bar-mini {
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill-mini {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: #888;
+}
+
+.tip {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    padding: 12px 15px;
+    margin-top: 20px;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 13px;
+    color: #1565c0;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.recommendations-info {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.info-badge {
+    display: inline-block;
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.btn-exploitation {
+    background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s;
+    margin-left: 10px;
+}
+
+.btn-exploitation:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(156, 39, 176, 0.4);
+}
+
+/* Exploitation область (лучшие для вас) */
+.exploitation-area {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.exploitation-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.exploitation-header h2 {
+    font-size: 28px;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.exploitation-icon {
+    font-size: 32px;
+    margin-right: 10px;
+}
+
+.exploitation-description {
+    color: #666;
+    font-size: 16px;
+}

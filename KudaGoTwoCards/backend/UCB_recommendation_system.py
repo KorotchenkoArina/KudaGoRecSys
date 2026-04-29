@@ -1,4 +1,5 @@
 import profile
+import random
 import numpy as np
 from scipy.linalg import inv
 from collections import defaultdict
@@ -780,6 +781,177 @@ class LinearUCBRecommendationSystem:
 
         return leader, diverse_candidate
     
+    def get_exploitation_recommendations(self, user_id, events, n=50, min_confidence=0.6):
+        """
+        Возвращает топ-n событий на основе чистой эксплуатации (mean_reward).
+        Использует веса theta из обученной UCB модели.
+        
+        Args:
+            user_id: ID пользователя
+            events: список всех событий
+            n: максимальное количество событий для возврата
+            min_confidence: минимальная уверенность для включения (0-1)
+        """
+        bandit = self.get_bandit(user_id)
+        profile = self.get_user_profile(user_id)
+        total_likes = len(profile.get('liked_events', []))
+        total_choices = profile.get('total_choices', 0)
+        
+        # Проверяем, достаточно ли данных
+        if total_choices < 5:
+            print(f"⚠️ Недостаточно данных для exploitation (всего {total_choices} выборов)")
+            return {
+                'recommendations': [],
+                'has_enough_data': False,
+                'total_choices': total_choices,
+                'total_likes': total_likes,
+                'min_confidence': min_confidence,
+                'found_count': 0,
+                'message': f'Недостаточно данных. Сделайте еще {5 - total_choices} выборов.'
+            }
+        
+        # Фильтруем уже обработанные события (лайкнутые и дизлайкнутые)
+        seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+        available_events = [e for e in events if e['id'] not in seen_ids]
+        
+        if not available_events:
+            return {
+                'recommendations': [],
+                'has_enough_data': True,
+                'total_choices': total_choices,
+                'total_likes': total_likes,
+                'found_count': 0,
+                'message': 'Новых событий не найдено'
+            }
+        
+        # Вычисляем mean_reward для каждого события
+        scored_events = []
+        for event in available_events:
+            try:
+                features = self.feature_extractor.extract_all_features(event)
+                _, mean_reward, uncertainty = bandit.get_score(features)
+                confidence = bandit.get_confidence(features)
+                
+                # Используем только mean_reward (чистая эксплуатация)
+                scored_events.append({
+                    'event': event,
+                    'mean_reward': mean_reward,
+                    'uncertainty': uncertainty,
+                    'confidence': confidence
+                })
+            except Exception as e:
+                print(f"Ошибка обработки события {event.get('id')}: {e}")
+                continue
+        
+        # Сортируем по mean_reward (от большего к меньшему)
+        scored_events.sort(key=lambda x: x['mean_reward'], reverse=True)
+        
+        # Фильтруем по уверенности (опционально)
+        high_confidence_events = [e for e in scored_events if e['confidence'] >= min_confidence]
+        
+        # Если нет событий с высокой уверенностью, берем лучшие
+        if not high_confidence_events:
+            high_confidence_events = scored_events[:n]
+        
+        # Находим min и max mean_reward среди всех событий
+        all_mean_rewards = [item['mean_reward'] for item in scored_events]
+        min_reward = min(all_mean_rewards)
+        max_reward = max(all_mean_rewards)
+        
+        # Для каждого события нормализуем в 0..100
+        for item in scored_events:
+            normalized = (item['mean_reward'] - min_reward) / (max_reward - min_reward + 1e-8)
+            item['normalized_percent'] = int(normalized * 100)
+
+        # Формируем результат
+        recommendations = []
+        for item in high_confidence_events[:n]:
+            event = item['event'].copy()
+            event['_mean_reward'] = float(item['mean_reward'])
+            event['_uncertainty'] = float(item['uncertainty'])
+            event['_confidence'] = float(item['confidence'])
+            event['_similarity_percent'] = item['normalized_percent']
+            event['_recommendation_type'] = 'exploitation'
+            recommendations.append(event)
+        
+        print(f"📊 Exploitation рекомендации: найдено {len(recommendations)} событий")
+        
+        return {
+            'recommendations': recommendations,
+            'has_enough_data': True,
+            'total_choices': total_choices,
+            'total_likes': total_likes,
+            'min_confidence': min_confidence,
+            'found_count': len(recommendations),
+            'message': None
+        }
+
+    def get_cosine_recommendations(self, user_id, events, n=50, similarity_threshold=0.8):
+        """
+        Возвращает топ-n событий на основе косинусного сходства с эмбеддингом профиля.
+        Использует только текстовые эмбеддинги, без UCB.
+        
+        Args:
+            user_id: ID пользователя
+            events: список всех событий
+            n: максимальное количество событий для возврата
+            similarity_threshold: порог сходства (0.8 = 80%)
+        """
+        profile = self.get_user_profile(user_id)
+        profile_embedding = np.array(profile.get('embedding', np.zeros(384)))
+        
+        total_likes = len(profile.get('liked_events', []))
+        
+        # Проверяем, есть ли вообще эмбеддинг профиля (не нулевой) и были ли лайки
+        if np.linalg.norm(profile_embedding) < 0.01 or total_likes == 0:
+            print(f"⚠️ Профиль пользователя пуст (лайков: {total_likes})")
+            return {
+                'recommendations': [],
+                'has_enough_likes': False,
+                'total_likes': total_likes,
+                'similarity_threshold': similarity_threshold
+            }
+        
+        # Фильтруем дизлайкнутые события
+        disliked_ids = set(profile.get('disliked_events', []))
+        available_events = [e for e in events if e['id'] not in disliked_ids]
+        
+        # Вычисляем косинусное сходство для каждого события
+        scored_events = []
+        for event in available_events:
+            event_embedding = self.feature_extractor.get_text_embedding(event)
+            
+            # Косинусное сходство
+            similarity = np.dot(profile_embedding, event_embedding) / (
+                np.linalg.norm(profile_embedding) * np.linalg.norm(event_embedding) + 1e-8
+            )
+            
+            scored_events.append((event, similarity))
+        
+        # Сортируем по убыванию сходства
+        scored_events.sort(key=lambda x: x[1], reverse=True)
+        
+        # Фильтруем по порогу сходства (> similarity_threshold)
+        high_similarity_events = [(event, sim) for event, sim in scored_events if sim > similarity_threshold]
+        
+        # Формируем результат
+        recommendations = []
+        for event, similarity in high_similarity_events[:n]:
+            event = event.copy()
+            event['_similarity'] = float(similarity)
+            event['_similarity_percent'] = int(similarity * 100)
+            event['_recommendation_type'] = 'cosine_similarity'
+            recommendations.append(event)
+        
+        print(f"📊 Косинусные рекомендации: найдено {len(recommendations)} событий с сходством > {similarity_threshold}")
+        
+        return {
+            'recommendations': recommendations,
+            'has_enough_likes': total_likes >= 3,  # Хотя бы 3 лайка для осмысленных рекомендаций
+            'total_likes': total_likes,
+            'similarity_threshold': similarity_threshold,
+            'found_count': len(recommendations)
+        }
 
     def get_model_insights(self, user_id):
         """

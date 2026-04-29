@@ -15,7 +15,7 @@ CORS(app)
 KUDAGO_API = 'https://kudago.com/public-api/v1.4/events/'
 CACHE_FILE = 'events_cache.json'
 EVENTS_PER_PAGE = 100  # Максимум на страницу (API поддерживает до 100)
-MAX_EVENTS = 200      # Общее количество событий для загрузки
+MAX_EVENTS = 400      # Общее количество событий для загрузки
 
 # Кэш для событий
 events_cache = []
@@ -497,6 +497,53 @@ def get_liked_events():
     liked_events_details = [events_dict[id] for id in liked_ids if id in events_dict]
     
     return jsonify({'success': True, 'liked_events': liked_events_details})
+
+@app.route('/api/recommendations/cosine', methods=['GET'])
+def get_cosine_recommendations():
+    """Возвращает топ рекомендации на основе косинусного сходства с профилем"""
+    user_id = get_or_create_user_session()
+    events = load_or_refresh_cache()
+    
+    result = recommendation_system.get_cosine_recommendations(user_id, events, n=50, similarity_threshold=0.8)
+    
+    return jsonify({
+        'success': True,
+        'recommendations': result['recommendations'],
+        'has_enough_likes': result['has_enough_likes'],
+        'total_likes': result['total_likes'],
+        'similarity_threshold': result['similarity_threshold'],
+        'found_count': result['found_count']
+    })
+
+@app.route('/api/recommendations/exploitation', methods=['GET'])
+def get_exploitation_recommendations():
+    """Возвращает топ рекомендации на основе чистой эксплуатации (mean_reward)"""
+    user_id = get_or_create_user_session()
+    events = load_or_refresh_cache()
+    
+    try:
+        result = recommendation_system.get_exploitation_recommendations(user_id, events, n=50, min_confidence=0.5)
+        return jsonify({
+            'success': True,
+            'recommendations': result['recommendations'],
+            'has_enough_data': result['has_enough_data'],
+            'total_choices': result['total_choices'],
+            'total_likes': result['total_likes'],
+            'found_count': result['found_count'],
+            'message': result.get('message')
+        })
+    except Exception as e:
+        print(f"Ошибка в get_exploitation_recommendations: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'recommendations': [],
+            'has_enough_data': False,
+            'found_count': 0,
+            'message': 'Произошла ошибка при поиске рекомендаций'
+        }), 500
 
 @app.route('/api/debug/console', methods=['POST'])
 def debug_console():

@@ -22,8 +22,14 @@
                         <span class="stat-label">Лайки:</span>
                         <span class="stat-value" id="likesCount">0</span>
                     </button>
+                    <button class="btn-cosine" id="cosineBtn">
+                        <span>🔍</span> Рекомендовать события
+                    </button>
                     <button class="btn-profile" id="profileBtn">
                         <span>👤</span> Профиль
+                    </button>
+                    <button class="btn-exploitation" id="exploitationBtn">
+                        <span>🎯</span> Лучшие для вас
                     </button>
                     <button class="btn-reset" id="resetBtn">
                         <span class="btn-icon">🔄</span>
@@ -42,7 +48,7 @@
                 </div>
             </div>
 
-            <!-- Область результатов -->
+            <!-- Область результатов (UCB рекомендации) -->
             <div id="resultsArea" class="results-area" style="display: none;">
                 <div class="results-header">
                     <h2>
@@ -60,7 +66,45 @@
                 </button>
             </div>
 
-            <!-- Область Лайков -->
+            <!-- Область косинусных рекомендаций (похожие события) -->
+            <div id="cosineArea" class="cosine-area" style="display: none;">
+                <div class="cosine-header">
+                    <h2>
+                        <span class="cosine-icon">🔍</span>
+                        Похожие на ваши предпочтения
+                    </h2>
+                    <p class="cosine-description">
+                        События, наиболее похожие на ваши лайки по текстовому содержанию:
+                    </p>
+                </div>
+                <div id="cosineGrid" class="recommendations-grid">
+                    <!-- Карточки похожих событий будут здесь -->
+                </div>
+                <button class="btn-back" id="backFromCosineBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
+            </div>
+
+            <!-- Область exploitation рекомендаций (лучшие для вас) -->
+            <div id="exploitationArea" class="exploitation-area" style="display: none;">
+                <div class="exploitation-header">
+                    <h2>
+                        <span class="exploitation-icon">🎯</span>
+                        Лучшие события для вас
+                    </h2>
+                    <p class="exploitation-description">
+                        События, которые максимально соответствуют вашему профилю на основе UCB модели:
+                    </p>
+                </div>
+                <div id="exploitationGrid" class="recommendations-grid"></div>
+                <button class="btn-back" id="backFromExploitationBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
+            </div>
+
+            <!-- Область лайков -->
             <div id="likesArea" class="likes-area" style="display: none;">
                 <div class="likes-header">
                     <h2>
