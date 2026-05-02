@@ -14,26 +14,26 @@
             <div class="header-content">
                 <h1 class="logo">
                     <span class="logo-icon">🎯</span>
-                    <span class="logo-text">EventChoice</span>
+                    <span class="logo-text" id="logoText">EventChoice</span>
                 </h1>
                 <div class="stats">
+                    <button class="btn-reset" id="resetBtn">
+                        <span class="btn-icon">🔄</span>
+                        Сбросить
+                    </button>
+                    <button class="btn-cosine" id="cosineBtn">
+                        <span>🔍</span> Рекомендовать события
+                    </button>
+                    <button class="btn-exploitation" id="exploitationBtn">
+                        <span>🎯</span> Лучшие для вас
+                    </button>
                     <button class="btn-likes btn-profile" id="likesBtn">
                         <span class="btn-icon">❤️</span>
                         <span class="stat-label">Лайки:</span>
                         <span class="stat-value" id="likesCount">0</span>
                     </button>
-                    <button class="btn-cosine" id="cosineBtn">
-                        <span>🔍</span> Рекомендовать события
-                    </button>
                     <button class="btn-profile" id="profileBtn">
                         <span>👤</span> Профиль
-                    </button>
-                    <button class="btn-exploitation" id="exploitationBtn">
-                        <span>🎯</span> Лучшие для вас
-                    </button>
-                    <button class="btn-reset" id="resetBtn">
-                        <span class="btn-icon">🔄</span>
-                        Сбросить
                     </button>
                 </div>
             </div>
@@ -50,6 +50,10 @@
 
             <!-- Область результатов (UCB рекомендации) -->
             <div id="resultsArea" class="results-area" style="display: none;">
+                <button class="btn-continue" id="continueBtn">
+                    <span class="btn-icon">🎲</span>
+                    Продолжить выбор
+                </button>
                 <div class="results-header">
                     <h2>
                         <span class="results-icon">🏆</span>
@@ -60,14 +64,14 @@
                     </p>
                 </div>
                 <div id="recommendations" class="recommendations-grid"></div>
-                <button class="btn-continue" id="continueBtn">
-                    <span class="btn-icon">🎲</span>
-                    Продолжить выбор
-                </button>
             </div>
 
             <!-- Область косинусных рекомендаций (похожие события) -->
             <div id="cosineArea" class="cosine-area" style="display: none;">
+                <button class="btn-back" id="backFromCosineBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
                 <div class="cosine-header">
                     <h2>
                         <span class="cosine-icon">🔍</span>
@@ -80,14 +84,14 @@
                 <div id="cosineGrid" class="recommendations-grid">
                     <!-- Карточки похожих событий будут здесь -->
                 </div>
-                <button class="btn-back" id="backFromCosineBtn">
-                    <span class="btn-icon">↩️</span>
-                    Назад к сравнениям
-                </button>
             </div>
 
             <!-- Область exploitation рекомендаций (лучшие для вас) -->
             <div id="exploitationArea" class="exploitation-area" style="display: none;">
+                <button class="btn-back" id="backFromExploitationBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
                 <div class="exploitation-header">
                     <h2>
                         <span class="exploitation-icon">🎯</span>
@@ -98,14 +102,14 @@
                     </p>
                 </div>
                 <div id="exploitationGrid" class="recommendations-grid"></div>
-                <button class="btn-back" id="backFromExploitationBtn">
-                    <span class="btn-icon">↩️</span>
-                    Назад к сравнениям
-                </button>
             </div>
 
             <!-- Область лайков -->
             <div id="likesArea" class="likes-area" style="display: none;">
+                <button class="btn-back" id="backToComparisonBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
                 <div class="likes-header">
                     <h2>
                         <span class="likes-icon">❤️</span>
@@ -118,10 +122,6 @@
                 <div id="likedEventsGrid" class="recommendations-grid">
                     <!-- Карточки лайкнутых событий будут здесь -->
                 </div>
-                <button class="btn-back" id="backToComparisonBtn">
-                    <span class="btn-icon">↩️</span>
-                    Назад к сравнениям
-                </button>
             </div>
         </main>
     </div>

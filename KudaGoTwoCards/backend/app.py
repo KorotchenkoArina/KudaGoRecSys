@@ -574,10 +574,10 @@ def reset_comparisons():
     """Сбрасывает историю сравнений"""
     user_id = get_or_create_user_session()
     
-    # Полностью сбрасываем профиль пользователя в рекомендательной системе
+    # 1. Полностью сбрасываем профиль пользователя и модель
     recommendation_system.reset_user_profile(user_id)
     
-    # Также очищаем логи сравнений для этого пользователя
+    # 2. Очищаем логи сравнений для этого пользователя
     if os.path.exists('comparisons_log.json'):
         try:
             with open('comparisons_log.json', 'r', encoding='utf-8') as f:
@@ -595,11 +595,19 @@ def reset_comparisons():
         except Exception as e:
             print(f"Ошибка при сбросе логов: {e}")
     
-    # Принудительно обновляем кэш событий, чтобы получить новые случайные страницы
+    # 3. Перемешиваем или обновляем кэш
     global events_cache, last_cache_update
-    events_cache = []
-    last_cache_update = None
-    load_or_refresh_cache()
+    cache_age = (datetime.now() - last_cache_update).total_seconds() if last_cache_update else float('inf')
+    
+    if cache_age > 3600:  # Если кэш старше 1 часа
+        print("🔄 Кэш устарел, загружаем новые события...")
+        events_cache = []
+        last_cache_update = None
+        load_or_refresh_cache()
+    else:
+        # Просто перемешиваем существующие события
+        random.shuffle(events_cache)
+        print(f"🃏 Кэш перемешан: {len(events_cache)} событий")
     
     return jsonify({'success': True, 'message': 'Данные сброшены! Начинаем заново 🎯'})
 

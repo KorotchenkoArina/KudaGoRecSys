@@ -385,7 +385,7 @@ class EventFeatureExtractor:
         
         return features[:14]  # гарантируем 14 признаков
     
-    def extract_all_features(self, event):
+    def extract_all_features(self, event, precomputed_embedding=None):
         """
         Извлекает признаки, включая косинусное сходство с профилем
         
@@ -399,7 +399,10 @@ class EventFeatureExtractor:
         features = []
         
         # 1. Текстовый эмбеддинг (384)
-        embedding = self.get_text_embedding(event)
+        if precomputed_embedding is not None:
+            embedding = precomputed_embedding
+        else:
+            embedding = self.get_text_embedding(event)
         features.extend(embedding)
         
         # 2. Price features (5)
@@ -444,14 +447,6 @@ class LinearUCBRecommendationSystem:
         
         self.bandits = {}
         self.user_profiles = {}
-        
-        # Инициализация глобального бандита для решения "холодного старта"
-        self.global_bandit = LinearUCB(
-            n_features=self.feature_dim,
-            alpha=self.alpha,
-            lambda_reg=self.lambda_reg
-        )
-        self.load_global_bandit()
 
         print(f"✅ Инициализирована LinearUCB система")
         print(f"   Размерность признаков: {self.feature_dim}")
@@ -461,27 +456,6 @@ class LinearUCBRecommendationSystem:
         print(f"   - Популярность: 3")
         print(f"   - Время и дата: 14")
         print(f"   - Резерв: {self.feature_dim - 436}")
-
-    def load_global_bandit(self):
-        """Загружает состояние глобального бандита."""
-        bandit_file = 'bandit_state_global.npz'
-        if os.path.exists(bandit_file):
-            try:
-                data = np.load(bandit_file)
-                self.global_bandit.A = data['A']
-                self.global_bandit.b = data['b']
-                self.global_bandit._update_theta()
-                print("✅ Глобальный бандит загружен с диска.")
-            except Exception as e:
-                print(f"⚠️ Ошибка загрузки глобального бандита: {e}")
-
-    def save_global_bandit(self):
-        """Сохраняет состояние глобального бандита."""
-        bandit_file = 'bandit_state_global.npz'
-        try:
-            np.savez(bandit_file, A=self.global_bandit.A, b=self.global_bandit.b)
-        except Exception as e:
-            print(f"⚠️ Ошибка сохранения глобального бандита: {e}")
 
     def load_bandit(self, user_id):
         """Загружает состояние бандита для пользователя."""
@@ -519,17 +493,14 @@ class LinearUCBRecommendationSystem:
         if user_id not in self.bandits:
             # 1. Пытаемся загрузить бандита с диска
             if not self.load_bandit(user_id):
-                # 2. Если не вышло (новый пользователь), создаем бандита на основе глобальной модели
-                print(f"Новый пользователь {user_id}. Инициализация из глобальной модели (warm start).")
+                # 2. Если не вышло (новый пользователь), создаем бандита с нуля (cold start)
+                print(f"Новый пользователь {user_id}. Инициализация с нуля (cold start).")
                 new_bandit = LinearUCB(
                     n_features=self.feature_dim,
                     alpha=self.alpha,
                     lambda_reg=self.lambda_reg
                 )
-                # Копируем знания из глобальной модели
-                new_bandit.A = np.copy(self.global_bandit.A)
-                new_bandit.b = np.copy(self.global_bandit.b)
-                new_bandit._update_theta() # Пересчитываем theta и A_inv
+                # Начинаем с нулевой матрицей и вектором (уже есть по умолчанию)
                 self.bandits[user_id] = new_bandit
         return self.bandits[user_id]
     
@@ -623,17 +594,15 @@ class LinearUCBRecommendationSystem:
             profile['embedding'] = current_embedding.tolist()
         
         current_embedding = np.array(current_embedding, dtype=np.float32)
-        features = self.feature_extractor.extract_all_features(event)
         event_embedding = self.feature_extractor.get_text_embedding(event)
+        features = self.feature_extractor.extract_all_features(event, precomputed_embedding=event_embedding)
         
         # Обновляем модели, используя награду -1 для дизлайков
         reward = 1 if liked else -1
         bandit.update(features, reward=reward)
-        self.global_bandit.update(features, reward=reward)
 
         # Сохраняем состояние бандитов на диск
         self.save_bandit(user_id)
-        self.save_global_bandit()
         
         # Если это повторный лайк, дальше профиль не обновляем
         if is_duplicate_like:
@@ -691,17 +660,29 @@ class LinearUCBRecommendationSystem:
         # Фильтруем события, которые пользователь уже видел (лайкнул ИЛИ дизлайкнул)
         seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
         available_events = [e for e in events if e['id'] not in seen_ids]
-        
+
         if len(available_events) < n:
             n = len(available_events)
         
         if not available_events:
             return []
+        
+        # Для первых выборов - случайные
+        if profile['total_choices'] == 0:
+            shuffled = available_events.copy()
+            random.shuffle(shuffled)
+            recommendations = []
+            for event in shuffled[:n]:
+                event = event.copy()
+                event['_recommendation_type'] = 'random'
+                recommendations.append(event)
+            return recommendations
 
         # Вычисляем UCB score для каждого события
         scored_events = []
         for event in available_events:
-            features = self.feature_extractor.extract_all_features(event)
+            event_embedding = self.feature_extractor.get_text_embedding(event)
+            features = self.feature_extractor.extract_all_features(event, precomputed_embedding=event_embedding)
             score, mean_reward, uncertainty = bandit.get_score(features)
             
             scored_events.append({
@@ -756,6 +737,12 @@ class LinearUCBRecommendationSystem:
         # 2. Первое событие в паре - это всегда лидер
         leader = candidates[0]
         
+        # Если нет features или это случайная рекомендация - не пытаемся искать diverse
+        if '_features' not in leader or leader.get('_recommendation_type') == 'random':
+            if len(candidates) >= 2:
+                return leader, candidates[1]
+            return leader, None
+
         # 3. Ищем второго кандидата, максимально не похожего на лидера
         diverse_candidate = None
         max_distance = -1
