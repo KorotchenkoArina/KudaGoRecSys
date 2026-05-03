@@ -504,7 +504,19 @@ def get_cosine_recommendations():
     user_id = get_or_create_user_session()
     events = load_or_refresh_cache()
     
-    result = recommendation_system.get_cosine_recommendations(user_id, events, n=50, similarity_threshold=0.8)
+    # ✅ Получаем параметры фильтрации
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    time_from = request.args.get('time_from')
+    time_to = request.args.get('time_to')
+    weekdays = request.args.getlist('weekdays')
+    
+    result = recommendation_system.get_cosine_recommendations(
+        user_id, events, n=3,
+        date_from=date_from, date_to=date_to,
+        time_from=time_from, time_to=time_to,
+        weekdays=[int(d) for d in weekdays] if weekdays else None
+    )
     
     return jsonify({
         'success': True,
@@ -521,8 +533,20 @@ def get_exploitation_recommendations():
     user_id = get_or_create_user_session()
     events = load_or_refresh_cache()
     
+    # ✅ Получаем параметры фильтрации
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    time_from = request.args.get('time_from')
+    time_to = request.args.get('time_to')
+    weekdays = request.args.getlist('weekdays')
+    
     try:
-        result = recommendation_system.get_exploitation_recommendations(user_id, events, n=50, min_confidence=0.5)
+        result = recommendation_system.get_exploitation_recommendations(
+            user_id, events, n=3, min_confidence=0.5,
+            date_from=date_from, date_to=date_to,
+            time_from=time_from, time_to=time_to,
+            weekdays=[int(d) for d in weekdays] if weekdays else None
+        )
         return jsonify({
             'success': True,
             'recommendations': result['recommendations'],
@@ -534,15 +558,12 @@ def get_exploitation_recommendations():
         })
     except Exception as e:
         print(f"Ошибка в get_exploitation_recommendations: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e),
             'recommendations': [],
             'has_enough_data': False,
-            'found_count': 0,
-            'message': 'Произошла ошибка при поиске рекомендаций'
+            'found_count': 0
         }), 500
 
 @app.route('/api/debug/console', methods=['POST'])

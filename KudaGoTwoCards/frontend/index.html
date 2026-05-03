@@ -72,6 +72,11 @@
                     <span class="btn-icon">↩️</span>
                     Назад к сравнениям
                 </button>
+                <div class="recommendation-actions">
+                    <button class="btn-filter" id="showFilterBtnCosine">
+                        <span>🔧</span> Настроить фильтры
+                    </button>
+                </div>
                 <div class="cosine-header">
                     <h2>
                         <span class="cosine-icon">🔍</span>
@@ -92,6 +97,11 @@
                     <span class="btn-icon">↩️</span>
                     Назад к сравнениям
                 </button>
+                <div class="recommendation-actions">
+                    <button class="btn-filter" id="showFilterBtnExploitation">
+                        <span>🔧</span> Настроить фильтры
+                    </button>
+                </div>
                 <div class="exploitation-header">
                     <h2>
                         <span class="exploitation-icon">🎯</span>
@@ -124,6 +134,49 @@
                 </div>
             </div>
         </main>
+                <!-- Модальное окно фильтров -->
+        <div id="filterModal" class="modal-overlay" style="display: none;">
+            <div class="modal-content filter-modal">
+                <div class="modal-header">
+                    <h3>🔍 Настройка рекомендаций</h3>
+                    <button class="modal-close" id="closeFilterModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="filter-group">
+                        <label>📅 Диапазон дат:</label>
+                        <div class="date-range">
+                            <input type="date" id="filterDateFrom" placeholder="от">
+                            <span>—</span>
+                            <input type="date" id="filterDateTo" placeholder="до">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>⏰ Время проведения:</label>
+                        <div class="time-range">
+                            <input type="time" id="filterTimeFrom" placeholder="от">
+                            <span>—</span>
+                            <input type="time" id="filterTimeTo" placeholder="до">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>📆 Дни недели:</label>
+                        <div class="weekdays">
+                            <label><input type="checkbox" value="1"> Пн</label>
+                            <label><input type="checkbox" value="2"> Вт</label>
+                            <label><input type="checkbox" value="3"> Ср</label>
+                            <label><input type="checkbox" value="4"> Чт</label>
+                            <label><input type="checkbox" value="5"> Пт</label>
+                            <label><input type="checkbox" value="6"> Сб</label>
+                            <label><input type="checkbox" value="7"> Вс</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn-apply" id="applyFiltersBtn">✅ Применить</button>
+                    <button class="btn-reset" id="resetFiltersBtn">🗑️ Сбросить</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

@@ -29,6 +29,149 @@ const exploitationArea = document.getElementById('exploitationArea');
 const exploitationGrid = document.getElementById('exploitationGrid');
 const backFromExploitationBtn = document.getElementById('backFromExploitationBtn');
 
+
+// Фильтрация
+
+// DOM элементы фильтров
+const filterModal = document.getElementById('filterModal');
+const closeFilterModal = document.getElementById('closeFilterModal');
+const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+const filterDateFrom = document.getElementById('filterDateFrom');
+const filterDateTo = document.getElementById('filterDateTo');
+const filterTimeFrom = document.getElementById('filterTimeFrom');
+const filterTimeTo = document.getElementById('filterTimeTo');
+const showFilterBtnCosine = document.getElementById('showFilterBtnCosine');
+const showFilterBtnExploitation = document.getElementById('showFilterBtnExploitation');
+
+
+// Глобальные переменные для фильтров
+let currentFilters = {
+    date_from: null,
+    date_to: null,
+    time_from: null,
+    time_to: null,
+    weekdays: []
+};
+
+// Открыть модальное окно
+function openFilterModal() {
+    filterModal.style.display = 'flex';
+}
+
+// Закрыть модальное окно
+function closeFilterModalFunc() {
+    filterModal.style.display = 'none';
+}
+
+function updateFilterIndicator() {
+    const hasFilters = currentFilters.date_from || currentFilters.date_to || 
+                       currentFilters.time_from || currentFilters.time_to || 
+                       currentFilters.weekdays.length > 0;
+    
+    // ✅ Обновляем кнопку в cosineArea
+    if (showFilterBtnCosine) {
+        if (hasFilters) {
+            showFilterBtnCosine.style.background = '#4caf50';
+            showFilterBtnCosine.innerHTML = '<span>🔧</span> Фильтры активны';
+        } else {
+            showFilterBtnCosine.style.background = '#6c757d';
+            showFilterBtnCosine.innerHTML = '<span>🔧</span> Настроить фильтры';
+        }
+    }
+    
+    // ✅ Обновляем кнопку в exploitationArea
+    if (showFilterBtnExploitation) {
+        if (hasFilters) {
+            showFilterBtnExploitation.style.background = '#4caf50';
+            showFilterBtnExploitation.innerHTML = '<span>🔧</span> Фильтры активны';
+        } else {
+            showFilterBtnExploitation.style.background = '#6c757d';
+            showFilterBtnExploitation.innerHTML = '<span>🔧</span> Настроить фильтры';
+        }
+    }
+}
+
+// Применить фильтры
+async function applyFilters() {
+    // Сохраняем выбранные фильтры
+    currentFilters = {
+        date_from: filterDateFrom.value || null,
+        date_to: filterDateTo.value || null,
+        time_from: filterTimeFrom.value || null,
+        time_to: filterTimeTo.value || null,
+        weekdays: getSelectedWeekdays()
+    };
+    
+    closeFilterModalFunc();
+    updateFilterIndicator(); 
+    
+    // Обновляем текущую страницу рекомендаций
+    if (cosineArea.style.display === 'block') {
+        await showCosineRecommendations();
+    } else if (exploitationArea.style.display === 'block') {
+        await showExploitationRecommendations();
+    }
+}
+
+// Сбросить фильтры
+async function resetFilters() {
+    filterDateFrom.value = '';
+    filterDateTo.value = '';
+    filterTimeFrom.value = '';
+    filterTimeTo.value = '';
+    document.querySelectorAll('.weekdays input').forEach(cb => cb.checked = false);
+    
+    currentFilters = {
+        date_from: null,
+        date_to: null,
+        time_from: null,
+        time_to: null,
+        weekdays: []
+    };
+    
+    closeFilterModalFunc();
+    updateFilterIndicator(); 
+    
+    // Обновляем текущую страницу рекомендаций
+    if (cosineArea.style.display === 'block') {
+        await showCosineRecommendations();
+    } else if (exploitationArea.style.display === 'block') {
+        await showExploitationRecommendations();
+    }
+}
+
+// Получить выбранные дни недели
+function getSelectedWeekdays() {
+    const checkboxes = document.querySelectorAll('.weekdays input:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+// Добавляем обработчики событий (в init() или отдельно)
+function initFilters() {
+    if (showFilterBtnCosine) {
+    showFilterBtnCosine.addEventListener('click', openFilterModal);
+    }
+    if (showFilterBtnExploitation) {
+        showFilterBtnExploitation.addEventListener('click', openFilterModal);
+    }
+    if (closeFilterModal) {
+        closeFilterModal.addEventListener('click', closeFilterModalFunc);
+    }
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', applyFilters);
+    }
+    if (resetFiltersBtn) {
+        resetFiltersBtn.addEventListener('click', resetFilters);
+    }
+    // Закрытие по клику вне окна
+    window.addEventListener('click', (e) => {
+        if (e.target === filterModal) {
+            closeFilterModalFunc();
+        }
+    });
+}
+
 // ============================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ============================================
@@ -621,12 +764,27 @@ function getDeclension(number, words) {
  */
 async function showCosineRecommendations() {
     showView('cosine');
+    updateFilterIndicator();
+
     cosineGrid.innerHTML = `
         <div class="loading">
             <div class="spinner"></div>
             <p>Ищем похожие события...</p>
         </div>
     `;
+
+    // Строим URL с параметрами фильтров
+    let url = `${API_BASE}/recommendations/cosine`;
+    const params = new URLSearchParams();
+    if (currentFilters.date_from) params.append('date_from', currentFilters.date_from);
+    if (currentFilters.date_to) params.append('date_to', currentFilters.date_to);
+    if (currentFilters.time_from) params.append('time_from', currentFilters.time_from);
+    if (currentFilters.time_to) params.append('time_to', currentFilters.time_to);
+    currentFilters.weekdays.forEach(d => params.append('weekdays', d));
+    
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
 
     // Удаляем старый блок с информацией, если он есть
     const oldInfoBlock = document.querySelector('.recommendations-info');
@@ -635,7 +793,7 @@ async function showCosineRecommendations() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/recommendations/cosine`);
+        const response = await fetch(url);
         const data = await response.json();
 
         if (!data.success) {
@@ -736,11 +894,11 @@ async function showCosineRecommendations() {
         // Добавляем информацию о количестве найденных событий
         const infoBlock = document.createElement('div');
         infoBlock.className = 'recommendations-info';
-        infoBlock.innerHTML = `
-            <div class="info-badge">
-                🎯 Найдено ${data.recommendations.length} событий с сходством выше 80%
-            </div>
-        `;
+        //infoBlock.innerHTML = `
+        //    <div class="info-badge">
+        //        🎯 Найдено ${data.recommendations.length} событий
+        //    </div>
+        //`;
         cosineGrid.parentElement.insertBefore(infoBlock, cosineGrid);
         
     } catch (error) {
@@ -760,6 +918,8 @@ async function showCosineRecommendations() {
  */
 async function showExploitationRecommendations() {
     showView('exploitation');
+    updateFilterIndicator();
+
     exploitationGrid.innerHTML = `
         <div class="loading">
             <div class="spinner"></div>
@@ -767,8 +927,21 @@ async function showExploitationRecommendations() {
         </div>
     `;
 
+    // Строим URL с параметрами фильтров
+    let url = `${API_BASE}/recommendations/exploitation`;
+    const params = new URLSearchParams();
+    if (currentFilters.date_from) params.append('date_from', currentFilters.date_from);
+    if (currentFilters.date_to) params.append('date_to', currentFilters.date_to);
+    if (currentFilters.time_from) params.append('time_from', currentFilters.time_from);
+    if (currentFilters.time_to) params.append('time_to', currentFilters.time_to);
+    currentFilters.weekdays.forEach(d => params.append('weekdays', d));
+    
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
+
     try {
-        const response = await fetch(`${API_BASE}/recommendations/exploitation`);
+        const response = await fetch(url);
         const data = await response.json();
 
         if (!data.success) {
@@ -1229,6 +1402,8 @@ async function init() {
     backToComparisonBtn.addEventListener('click', () => showView('comparison'));
     backFromExploitationBtn.addEventListener('click', () => showView('comparison'));
     
+    initFilters();
+    updateFilterIndicator(); 
     setupKeyboardShortcuts();
         
     console.log('Приложение инициализировано!');
