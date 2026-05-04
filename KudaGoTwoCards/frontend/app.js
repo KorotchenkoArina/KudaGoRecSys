@@ -14,6 +14,163 @@ const resultsArea = document.getElementById('resultsArea');
 const comparisonsCountElement = document.getElementById('comparisonsCount');
 const resetBtn = document.getElementById('resetBtn');
 const continueBtn = document.getElementById('continueBtn');
+const profileBtn = document.getElementById('profileBtn');
+const likesBtn = document.getElementById('likesBtn');
+const likesArea = document.getElementById('likesArea');
+const likesCountElement = document.getElementById('likesCount');
+const backToComparisonBtn = document.getElementById('backToComparisonBtn');
+const likedEventsGrid = document.getElementById('likedEventsGrid');
+const cosineBtn = document.getElementById('cosineBtn');
+const cosineArea = document.getElementById('cosineArea');
+const cosineGrid = document.getElementById('cosineGrid');
+const backFromCosineBtn = document.getElementById('backFromCosineBtn');
+const exploitationBtn = document.getElementById('exploitationBtn');
+const exploitationArea = document.getElementById('exploitationArea');
+const exploitationGrid = document.getElementById('exploitationGrid');
+const backFromExploitationBtn = document.getElementById('backFromExploitationBtn');
+
+
+// Фильтрация
+
+// DOM элементы фильтров
+const filterModal = document.getElementById('filterModal');
+const closeFilterModal = document.getElementById('closeFilterModal');
+const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+const resetFiltersBtn = document.getElementById('resetFiltersBtn');
+const filterDateFrom = document.getElementById('filterDateFrom');
+const filterDateTo = document.getElementById('filterDateTo');
+const filterTimeFrom = document.getElementById('filterTimeFrom');
+const filterTimeTo = document.getElementById('filterTimeTo');
+const showFilterBtnCosine = document.getElementById('showFilterBtnCosine');
+const showFilterBtnExploitation = document.getElementById('showFilterBtnExploitation');
+
+
+// Глобальные переменные для фильтров
+let currentFilters = {
+    date_from: null,
+    date_to: null,
+    time_from: null,
+    time_to: null,
+    weekdays: []
+};
+
+// Открыть модальное окно
+function openFilterModal() {
+    filterModal.style.display = 'flex';
+}
+
+// Закрыть модальное окно
+function closeFilterModalFunc() {
+    filterModal.style.display = 'none';
+}
+
+function updateFilterIndicator() {
+    const hasFilters = currentFilters.date_from || currentFilters.date_to || 
+                       currentFilters.time_from || currentFilters.time_to || 
+                       currentFilters.weekdays.length > 0;
+    
+    // ✅ Обновляем кнопку в cosineArea
+    if (showFilterBtnCosine) {
+        if (hasFilters) {
+            showFilterBtnCosine.style.background = '#4caf50';
+            showFilterBtnCosine.innerHTML = '<span>🔧</span> Фильтры активны';
+        } else {
+            showFilterBtnCosine.style.background = '#6c757d';
+            showFilterBtnCosine.innerHTML = '<span>🔧</span> Настроить фильтры';
+        }
+    }
+    
+    // ✅ Обновляем кнопку в exploitationArea
+    if (showFilterBtnExploitation) {
+        if (hasFilters) {
+            showFilterBtnExploitation.style.background = '#4caf50';
+            showFilterBtnExploitation.innerHTML = '<span>🔧</span> Фильтры активны';
+        } else {
+            showFilterBtnExploitation.style.background = '#6c757d';
+            showFilterBtnExploitation.innerHTML = '<span>🔧</span> Настроить фильтры';
+        }
+    }
+}
+
+// Применить фильтры
+async function applyFilters() {
+    // Сохраняем выбранные фильтры
+    currentFilters = {
+        date_from: filterDateFrom.value || null,
+        date_to: filterDateTo.value || null,
+        time_from: filterTimeFrom.value || null,
+        time_to: filterTimeTo.value || null,
+        weekdays: getSelectedWeekdays()
+    };
+    
+    closeFilterModalFunc();
+    updateFilterIndicator(); 
+    
+    // Обновляем текущую страницу рекомендаций
+    if (cosineArea.style.display === 'block') {
+        await showCosineRecommendations();
+    } else if (exploitationArea.style.display === 'block') {
+        await showExploitationRecommendations();
+    }
+}
+
+// Сбросить фильтры
+async function resetFilters() {
+    filterDateFrom.value = '';
+    filterDateTo.value = '';
+    filterTimeFrom.value = '';
+    filterTimeTo.value = '';
+    document.querySelectorAll('.weekdays input').forEach(cb => cb.checked = false);
+    
+    currentFilters = {
+        date_from: null,
+        date_to: null,
+        time_from: null,
+        time_to: null,
+        weekdays: []
+    };
+    
+    closeFilterModalFunc();
+    updateFilterIndicator(); 
+    
+    // Обновляем текущую страницу рекомендаций
+    if (cosineArea.style.display === 'block') {
+        await showCosineRecommendations();
+    } else if (exploitationArea.style.display === 'block') {
+        await showExploitationRecommendations();
+    }
+}
+
+// Получить выбранные дни недели
+function getSelectedWeekdays() {
+    const checkboxes = document.querySelectorAll('.weekdays input:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+// Добавляем обработчики событий (в init() или отдельно)
+function initFilters() {
+    if (showFilterBtnCosine) {
+    showFilterBtnCosine.addEventListener('click', openFilterModal);
+    }
+    if (showFilterBtnExploitation) {
+        showFilterBtnExploitation.addEventListener('click', openFilterModal);
+    }
+    if (closeFilterModal) {
+        closeFilterModal.addEventListener('click', closeFilterModalFunc);
+    }
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', applyFilters);
+    }
+    if (resetFiltersBtn) {
+        resetFiltersBtn.addEventListener('click', resetFilters);
+    }
+    // Закрытие по клику вне окна
+    window.addEventListener('click', (e) => {
+        if (e.target === filterModal) {
+            closeFilterModalFunc();
+        }
+    });
+}
 
 // ============================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -98,8 +255,8 @@ async function loadStats() {
         const response = await fetch(`${API_BASE}/user/profile`);
         const data = await response.json();
         if (data.success) {
-            comparisonsCount = data.total_choices;  // ← берем с сервера
-            comparisonsCountElement.textContent = comparisonsCount;
+            comparisonsCount = data.total_choices;  // Оставляем для других частей интерфейса (панель профиля)
+            likesCountElement.textContent = data.liked_count || 0; // Обновляем новый счетчик лайков
         }
     } catch (error) {
         console.error('Ошибка загрузки статистики:', error);
@@ -573,11 +730,379 @@ async function showUserProfile() {
 }
 
 /**
+ * Управляет отображением основных экранов приложения.
+ * @param {'comparison' | 'results' | 'likes'} viewName Имя экрана для показа
+ */
+function showView(viewName) {
+    comparisonArea.style.display = 'none';
+    resultsArea.style.display = 'none';
+    likesArea.style.display = 'none';
+    cosineArea.style.display = 'none';
+    exploitationArea.style.display = 'none';
+
+    if (viewName === 'comparison') {
+        comparisonArea.style.display = 'flex';
+    } else if (viewName === 'results') {
+        resultsArea.style.display = 'block';
+    } else if (viewName === 'likes') {
+        likesArea.style.display = 'block';
+    } else if (viewName === 'cosine') {
+        cosineArea.style.display = 'block';
+    } else if (viewName === 'exploitation') {
+        exploitationArea.style.display = 'block';
+    }
+}
+
+function getDeclension(number, words) {
+    const cases = [2, 0, 1, 1, 1, 2];
+    const index = (number % 100 > 4 && number % 100 < 20) ? 2 : cases[Math.min(number % 10, 5)];
+    return words[index];
+}
+
+/**
+ * Косинусные рекомендации 
+ */
+async function showCosineRecommendations() {
+    showView('cosine');
+    updateFilterIndicator();
+
+    cosineGrid.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Ищем похожие события...</p>
+        </div>
+    `;
+
+    // Строим URL с параметрами фильтров
+    let url = `${API_BASE}/recommendations/cosine`;
+    const params = new URLSearchParams();
+    if (currentFilters.date_from) params.append('date_from', currentFilters.date_from);
+    if (currentFilters.date_to) params.append('date_to', currentFilters.date_to);
+    if (currentFilters.time_from) params.append('time_from', currentFilters.time_from);
+    if (currentFilters.time_to) params.append('time_to', currentFilters.time_to);
+    currentFilters.weekdays.forEach(d => params.append('weekdays', d));
+    
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
+
+    // Удаляем старый блок с информацией, если он есть
+    const oldInfoBlock = document.querySelector('.recommendations-info');
+    if (oldInfoBlock) {
+        oldInfoBlock.remove();
+    }
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error('Ошибка загрузки');
+        }
+
+        // Случай 1: Недостаточно лайков
+        if (!data.has_enough_likes || data.total_likes < 3) {
+            const needed = 3 - data.total_likes;
+            cosineGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">👍</div>
+                    <p class="empty-state-text">Нужно больше ваших оценок!</p>
+                    <p class="empty-state-subtext">
+                        Поставьте лайк ещё ${needed} ${getDeclension(needed, ['событию', 'событиям', 'событиям'])}. 
+                        Это поможет нам лучше понять ваши предпочтения.
+                    </p>
+                    <div class="progress-mini">
+                        <div class="progress-bar-mini">
+                            <div class="progress-fill-mini" style="width: ${(data.total_likes / 3 * 100)}%"></div>
+                        </div>
+                        <p class="progress-text">${data.total_likes} из 3 лайков</p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        // Случай 2: Нет событий с высоким сходством
+        if (data.recommendations.length === 0) {
+            cosineGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p class="empty-state-text">Нет событий с высоким сходством</p>
+                    <p class="empty-state-subtext">
+                        Мы не нашли событий, которые соответствуют вашим предпочтениям на 80% и выше.
+                        Попробуйте поставить больше лайков на разные события, чтобы расширить профиль.
+                    </p>
+                    <div class="tip">
+                        💡 Совет: Лайкайте события, которые вам действительно интересны,
+                        чтобы мы могли лучше понять ваши предпочтения.
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        // Случай 3: Есть рекомендации - показываем их
+        cosineGrid.innerHTML = data.recommendations.map((rec, index) => {
+            const similarityPercent = rec._similarity_percent || Math.round(rec._similarity * 100);
+            let similarityColor = '';
+            let similarityIcon = '';
+            if (similarityPercent >= 90) {
+                similarityColor = '#4caf50';
+                similarityIcon = '🎯';
+            } else if (similarityPercent >= 80) {
+                similarityColor = '#8bc34a';
+                similarityIcon = '✅';
+            } else if (similarityPercent >= 70) {
+                similarityColor = '#ff9800';
+                similarityIcon = '📌';
+            } else {
+                similarityColor = '#2196f3';
+                similarityIcon = '🔍';
+            }
+            
+            return `
+                <div class="recommendation-card" onclick="window.open('${rec.url}', '_blank')">
+                    <div class="recommendation-image" style="background-image: url('${rec.image}')">
+                        <div class="recommendation-rank">${index + 1}</div>
+                        <div class="similarity-badge" style="background: ${similarityColor}">
+                            ${similarityIcon} ${similarityPercent}%
+                        </div>
+                    </div>
+                    <div class="recommendation-content">
+                        <h4 class="recommendation-title">${escapeHtml(rec.title)}</h4>
+                        <div class="recommendation-place">
+                            <span>📍</span>
+                            <span>${escapeHtml(rec.place)}</span>
+                        </div>
+                        <div class="recommendation-date">
+                            <span>📅</span>
+                            <span>${formatDate(rec.date)}</span>
+                        </div>
+                        <div class="recommendation-price">
+                            <span>💰</span>
+                            <span>${escapeHtml(rec.price)}</span>
+                        </div>
+                        <div class="recommendation-similarity">
+                            <span>🔗</span>
+                            <span>Сходство: ${similarityPercent}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Добавляем информацию о количестве найденных событий
+        const infoBlock = document.createElement('div');
+        infoBlock.className = 'recommendations-info';
+        //infoBlock.innerHTML = `
+        //    <div class="info-badge">
+        //        🎯 Найдено ${data.recommendations.length} событий
+        //    </div>
+        //`;
+        cosineGrid.parentElement.insertBefore(infoBlock, cosineGrid);
+        
+    } catch (error) {
+        console.error('Ошибка загрузки косинусных рекомендаций:', error);
+        cosineGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <p class="empty-state-text">Ошибка загрузки рекомендаций</p>
+                <p class="empty-state-subtext">Проверьте подключение к серверу и попробуйте снова.</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Показывает страницу с exploitation рекомендациями
+ */
+async function showExploitationRecommendations() {
+    showView('exploitation');
+    updateFilterIndicator();
+
+    exploitationGrid.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Анализируем ваши предпочтения...</p>
+        </div>
+    `;
+
+    // Строим URL с параметрами фильтров
+    let url = `${API_BASE}/recommendations/exploitation`;
+    const params = new URLSearchParams();
+    if (currentFilters.date_from) params.append('date_from', currentFilters.date_from);
+    if (currentFilters.date_to) params.append('date_to', currentFilters.date_to);
+    if (currentFilters.time_from) params.append('time_from', currentFilters.time_from);
+    if (currentFilters.time_to) params.append('time_to', currentFilters.time_to);
+    currentFilters.weekdays.forEach(d => params.append('weekdays', d));
+    
+    if (params.toString()) {
+        url += '?' + params.toString();
+    }
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error(data.error || 'Ошибка загрузки');
+        }
+
+        if (!data.has_enough_data) {
+            exploitationGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🎯</div>
+                    <p class="empty-state-text">Недостаточно данных</p>
+                    <p class="empty-state-subtext">
+                        ${data.message || 'Сделайте больше сравнений, чтобы получить точные рекомендации.'}
+                    </p>
+                    <div class="progress-mini">
+                        <div class="progress-bar-mini">
+                            <div class="progress-fill-mini" style="width: ${(data.total_choices / 5 * 100)}%"></div>
+                        </div>
+                        <p class="progress-text">${data.total_choices} из 5 выборов</p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        if (data.recommendations.length === 0) {
+            exploitationGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p class="empty-state-text">Нет подходящих событий</p>
+                    <p class="empty-state-subtext">
+                        Пока не найдено событий, которые идеально подходят под ваш профиль.
+                        Продолжайте оценивать события!
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        exploitationGrid.innerHTML = data.recommendations.map((rec, index) => {
+            const matchPercent = rec._similarity_percent || 50;
+            let color = '';
+            let icon = '';
+            if (matchPercent >= 80) {
+                color = '#4caf50';
+                icon = '🎯';
+            } else if (matchPercent >= 60) {
+                color = '#ff9800';
+                icon = '📌';
+            } else {
+                color = '#2196f3';
+                icon = '🔍';
+            }
+            
+            return `
+                <div class="recommendation-card" onclick="window.open('${rec.url}', '_blank')">
+                    <div class="recommendation-image" style="background-image: url('${rec.image}')">
+                        <div class="recommendation-rank">${index + 1}</div>
+                        <div class="similarity-badge" style="background: ${color}">
+                            ${icon} ${matchPercent}%
+                        </div>
+                    </div>
+                    <div class="recommendation-content">
+                        <h4 class="recommendation-title">${escapeHtml(rec.title)}</h4>
+                        <div class="recommendation-place">
+                            <span>📍</span>
+                            <span>${escapeHtml(rec.place)}</span>
+                        </div>
+                        <div class="recommendation-date">
+                            <span>📅</span>
+                            <span>${formatDate(rec.date)}</span>
+                        </div>
+                        <div class="recommendation-price">
+                            <span>💰</span>
+                            <span>${escapeHtml(rec.price)}</span>
+                        </div>
+                        <div class="recommendation-match">
+                            <span>🎯</span>
+                            <span>Совпадение: ${matchPercent}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки exploitation рекомендаций:', error);
+        exploitationGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <p class="empty-state-text">Ошибка загрузки рекомендаций</p>
+                <p class="empty-state-subtext">Проверьте подключение к серверу и попробуйте снова.</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Показывает страницу с лайкнутыми событиями
+ */
+async function showLikesPage() {
+    showView('likes');
+    likedEventsGrid.innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Загружаем ваши лайки...</p>
+        </div>
+    `;
+
+    try {
+        // Этот эндпоинт мы создадим на бэкенде следующим шагом
+        const response = await fetch(`${API_BASE}/user/liked-events`);
+        const data = await response.json();
+
+        if (data.success && data.liked_events.length > 0) {
+            likedEventsGrid.innerHTML = data.liked_events.map(event => `
+                <div class="recommendation-card" onclick="window.open('${event.url}', '_blank')">
+                    <div class="recommendation-image" style="background-image: url('${event.image}')">
+                    </div>
+                    <div class="recommendation-content">
+                        <h4 class="recommendation-title">${escapeHtml(event.title)}</h4>
+                        <div class="recommendation-place">
+                            <span>📍</span>
+                            <span>${escapeHtml(event.place)}</span>
+                        </div>
+                        <div class="recommendation-date">
+                            <span>📅</span>
+                            <span>${formatDate(event.date)}</span>
+                        </div>
+                        <div class="recommendation-price">
+                            <span>💰</span>
+                            <span>${escapeHtml(event.price)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            likedEventsGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🤔</div>
+                    <p class="empty-state-text">У вас пока нет лайков.</p>
+                    <p class="empty-state-subtext">Начните сравнивать события, чтобы составить свою коллекцию!</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки лайкнутых событий:', error);
+        likedEventsGrid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <p class="empty-state-text">Ошибка загрузки данных</p>
+            </div>
+        `;
+    }
+}
+
+/**
  * Показать рекомендации (список)
  */
 async function showRecommendations() {
-    comparisonArea.style.display = 'none';
-    resultsArea.style.display = 'block';
+    showView('results');
     
     try {
         const response = await fetch(`${API_BASE}/recommendations`);
@@ -637,11 +1162,9 @@ async function resetGame() {
     if (confirm('Сбросить все сравнения и начать заново?')) {
         try {
             await fetch(`${API_BASE}/reset`, { method: 'POST' });
-            comparisonsCount = 0;
-            comparisonsCountElement.textContent = '0';
+            await loadStats(); // Обновляем все счетчики
             
-            comparisonArea.style.display = 'flex';
-            resultsArea.style.display = 'none';
+            showView('comparison'); // Возвращаемся на главный экран
             
             await loadComparisonPair();
             showMessage('Все данные сброшены! Начинаем заново 🎯', 'success');
@@ -870,9 +1393,19 @@ async function init() {
 
     
     resetBtn.addEventListener('click', resetGame);
+    profileBtn.addEventListener('click', showUserProfile);
+    likesBtn.addEventListener('click', showLikesPage);
+    cosineBtn.addEventListener('click', showCosineRecommendations);
+    exploitationBtn.addEventListener('click', showExploitationRecommendations);
+    
+    backFromCosineBtn.addEventListener('click', () => showView('comparison'));
+    backToComparisonBtn.addEventListener('click', () => showView('comparison'));
+    backFromExploitationBtn.addEventListener('click', () => showView('comparison'));
+    
+    initFilters();
+    updateFilterIndicator(); 
     setupKeyboardShortcuts();
-    
-    
+        
     console.log('Приложение инициализировано!');
     console.log('💡 Подсказки:');
     console.log('   ← →  - выбор события стрелками');

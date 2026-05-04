@@ -15,7 +15,7 @@ CORS(app)
 KUDAGO_API = 'https://kudago.com/public-api/v1.4/events/'
 CACHE_FILE = 'events_cache.json'
 EVENTS_PER_PAGE = 100  # Максимум на страницу (API поддерживает до 100)
-MAX_EVENTS = 200      # Общее количество событий для загрузки
+MAX_EVENTS = 400      # Общее количество событий для загрузки
 
 # Кэш для событий
 events_cache = []
@@ -479,6 +479,93 @@ def get_user_profile():
         'message': 'Профиль не найден'
     })
 
+@app.route('/api/user/liked-events', methods=['GET'])
+def get_liked_events():
+    """Возвращает список событий, которые пользователь лайкнул."""
+    user_id = get_or_create_user_session()
+    profile = recommendation_system.get_user_profile(user_id)
+    liked_ids = profile.get('liked_events', [])
+    
+    # Реверсируем, чтобы новые лайки были вверху
+    liked_ids.reverse()
+    
+    # Загружаем актуальные события
+    all_events = load_or_refresh_cache()
+    events_dict = {event['id']: event for event in all_events}
+    
+    # Находим полные данные для лайкнутых событий, сохраняя порядок
+    liked_events_details = [events_dict[id] for id in liked_ids if id in events_dict]
+    
+    return jsonify({'success': True, 'liked_events': liked_events_details})
+
+@app.route('/api/recommendations/cosine', methods=['GET'])
+def get_cosine_recommendations():
+    """Возвращает топ рекомендации на основе косинусного сходства с профилем"""
+    user_id = get_or_create_user_session()
+    events = load_or_refresh_cache()
+    
+    # ✅ Получаем параметры фильтрации
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    time_from = request.args.get('time_from')
+    time_to = request.args.get('time_to')
+    weekdays = request.args.getlist('weekdays')
+    
+    result = recommendation_system.get_cosine_recommendations(
+        user_id, events, n=3,
+        date_from=date_from, date_to=date_to,
+        time_from=time_from, time_to=time_to,
+        weekdays=[int(d) for d in weekdays] if weekdays else None
+    )
+    
+    return jsonify({
+        'success': True,
+        'recommendations': result['recommendations'],
+        'has_enough_likes': result['has_enough_likes'],
+        'total_likes': result['total_likes'],
+        'similarity_threshold': result['similarity_threshold'],
+        'found_count': result['found_count']
+    })
+
+@app.route('/api/recommendations/exploitation', methods=['GET'])
+def get_exploitation_recommendations():
+    """Возвращает топ рекомендации на основе чистой эксплуатации (mean_reward)"""
+    user_id = get_or_create_user_session()
+    events = load_or_refresh_cache()
+    
+    # ✅ Получаем параметры фильтрации
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    time_from = request.args.get('time_from')
+    time_to = request.args.get('time_to')
+    weekdays = request.args.getlist('weekdays')
+    
+    try:
+        result = recommendation_system.get_exploitation_recommendations(
+            user_id, events, n=3, min_confidence=0.5,
+            date_from=date_from, date_to=date_to,
+            time_from=time_from, time_to=time_to,
+            weekdays=[int(d) for d in weekdays] if weekdays else None
+        )
+        return jsonify({
+            'success': True,
+            'recommendations': result['recommendations'],
+            'has_enough_data': result['has_enough_data'],
+            'total_choices': result['total_choices'],
+            'total_likes': result['total_likes'],
+            'found_count': result['found_count'],
+            'message': result.get('message')
+        })
+    except Exception as e:
+        print(f"Ошибка в get_exploitation_recommendations: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'recommendations': [],
+            'has_enough_data': False,
+            'found_count': 0
+        }), 500
+
 @app.route('/api/debug/console', methods=['POST'])
 def debug_console():
     data = request.json
@@ -508,10 +595,10 @@ def reset_comparisons():
     """Сбрасывает историю сравнений"""
     user_id = get_or_create_user_session()
     
-    # Полностью сбрасываем профиль пользователя в рекомендательной системе
+    # 1. Полностью сбрасываем профиль пользователя и модель
     recommendation_system.reset_user_profile(user_id)
     
-    # Также очищаем логи сравнений для этого пользователя
+    # 2. Очищаем логи сравнений для этого пользователя
     if os.path.exists('comparisons_log.json'):
         try:
             with open('comparisons_log.json', 'r', encoding='utf-8') as f:
@@ -529,11 +616,19 @@ def reset_comparisons():
         except Exception as e:
             print(f"Ошибка при сбросе логов: {e}")
     
-    # Принудительно обновляем кэш событий, чтобы получить новые случайные страницы
+    # 3. Перемешиваем или обновляем кэш
     global events_cache, last_cache_update
-    events_cache = []
-    last_cache_update = None
-    load_or_refresh_cache()
+    cache_age = (datetime.now() - last_cache_update).total_seconds() if last_cache_update else float('inf')
+    
+    if cache_age > 3600:  # Если кэш старше 1 часа
+        print("🔄 Кэш устарел, загружаем новые события...")
+        events_cache = []
+        last_cache_update = None
+        load_or_refresh_cache()
+    else:
+        # Просто перемешиваем существующие события
+        random.shuffle(events_cache)
+        print(f"🃏 Кэш перемешан: {len(events_cache)} событий")
     
     return jsonify({'success': True, 'message': 'Данные сброшены! Начинаем заново 🎯'})
 

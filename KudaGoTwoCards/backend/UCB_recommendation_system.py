@@ -1,4 +1,5 @@
 import profile
+import random
 import numpy as np
 from scipy.linalg import inv
 from collections import defaultdict
@@ -71,9 +72,9 @@ class LinearUCB:
     
     def update(self, features, reward):
         """
-        Обновляет модель на основе фидбека
+        Обновляет модель на основе фидбека (ОПТИМИЗИРОВАННАЯ ВЕРСИЯ)
         features: вектор признаков события
-        reward: 1 (лайк) или 0 (дизлайк)
+        reward: 1 (лайк) или -1 (дизлайк)
         """
         features = np.array(features).reshape(-1, 1)
         
@@ -82,9 +83,17 @@ class LinearUCB:
         
         # Обновляем b = b + reward * x
         self.b += reward * features.flatten()
+
+        # ОПТИМИЗАЦИЯ: Обновляем A_inv с помощью формулы Шермана-Моррисона
+        # Это на порядки быстрее, чем инвертировать матрицу заново.
+        # Сложность O(d^2) вместо O(d^3).
+        A_inv_dot_x = np.dot(self.A_inv, features)
+        numerator = np.dot(A_inv_dot_x, A_inv_dot_x.T)
+        denominator = 1 + np.dot(features.T, A_inv_dot_x)
+        self.A_inv -= numerator / denominator
         
-        # Пересчитываем theta
-        self._update_theta()
+        # Обновляем theta с новым A_inv
+        self.theta = np.dot(self.A_inv, self.b)
         
         self.total_updates += 1
         self.reward_history.append(reward)
@@ -123,7 +132,7 @@ class EventFeatureExtractor:
     
     def __init__(self, model_name='paraphrase-multilingual-MiniLM-L12-v2'):
         print("Загрузка модели для эмбеддингов...")
-        self.sentence_model = SentenceTransformer(model_name)
+        self.sentence_model = SentenceTransformer(model_name, device='cpu')
         print(f"Модель загружена, размерность эмбеддингов: {self.sentence_model.get_sentence_embedding_dimension()}")
         
         # Размерность итогового признакового пространства
@@ -376,7 +385,7 @@ class EventFeatureExtractor:
         
         return features[:14]  # гарантируем 14 признаков
     
-    def extract_all_features(self, event):
+    def extract_all_features(self, event, precomputed_embedding=None):
         """
         Извлекает признаки, включая косинусное сходство с профилем
         
@@ -390,7 +399,10 @@ class EventFeatureExtractor:
         features = []
         
         # 1. Текстовый эмбеддинг (384)
-        embedding = self.get_text_embedding(event)
+        if precomputed_embedding is not None:
+            embedding = precomputed_embedding
+        else:
+            embedding = self.get_text_embedding(event)
         features.extend(embedding)
         
         # 2. Price features (5)
@@ -421,6 +433,137 @@ class EventFeatureExtractor:
     def get_feature_dimension(self):
         """Возвращает размерность признакового пространства"""
         return 450
+    
+    def parse_event_date(self, date_str):
+        """Парсит дату из строки события для фильтрации"""
+        if not date_str or date_str == 'Дата не указана':
+            return None
+        try:
+            import re
+            from datetime import datetime
+            
+            patterns = [
+                r'(\d{1,2})\s+(\w+)\s+(\d{4})',  # 15 March 2026
+                r'(\d{2})\.(\d{2})\.(\d{4})',     # 15.03.2026
+                r'(\d{4})-(\d{2})-(\d{2})',       # 2026-03-15
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, date_str)
+                if match:
+                    if len(match.groups()) == 3:
+                        day, month, year = match.groups()
+                        months = {'january': 1, 'february': 2, 'march': 3, 'april': 4, 
+                                  'may': 5, 'june': 6, 'july': 7, 'august': 8,
+                                  'september': 9, 'october': 10, 'november': 11, 'december': 12}
+                        if month.lower() in months:
+                            month = months[month.lower()]
+                        return datetime(int(year), int(month), int(day))
+            return None
+        except:
+            return None
+    
+    def parse_event_time(self, date_str):
+        """Парсит время из строки события для фильтрации (возвращает минуты с начала дня)"""
+        if not date_str or date_str == 'Дата не указана':
+            return None
+        try:
+            import re
+            time_match = re.search(r'(\d{1,2}):(\d{2})', date_str)
+            if time_match:
+                hour = int(time_match.group(1))
+                minute = int(time_match.group(2))
+                return hour * 60 + minute
+            return None
+        except:
+            return None
+    
+    def filter_events_by_time(self, events, date_from=None, date_to=None, 
+                               time_from=None, time_to=None, weekdays=None):
+        """
+        Фильтрует события по временным параметрам.
+        
+        Args:
+            events: список событий
+            date_from: дата от (YYYY-MM-DD)
+            date_to: дата до (YYYY-MM-DD)
+            time_from: время от (HH:MM)
+            time_to: время до (HH:MM)
+            weekdays: список дней недели (1-7, где 1-пн)
+        
+        Returns:
+            отфильтрованный список событий
+        """
+        from datetime import datetime
+        
+        # Парсим фильтры дат
+        date_from_obj = None
+        date_to_obj = None
+        if date_from:
+            try:
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            except:
+                pass
+        if date_to:
+            try:
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            except:
+                pass
+        
+        # Парсим фильтры времени (в минутах от полуночи)
+        time_from_min = None
+        time_to_min = None
+        if time_from:
+            try:
+                parts = time_from.split(':')
+                time_from_min = int(parts[0]) * 60 + int(parts[1])
+            except:
+                pass
+        if time_to:
+            try:
+                parts = time_to.split(':')
+                time_to_min = int(parts[0]) * 60 + int(parts[1])
+            except:
+                pass
+        
+        # Дни недели
+        weekdays_set = set(weekdays) if weekdays else None
+        
+        filtered_events = []
+        
+        for event in events:
+            event_date_str = event.get('date', '')
+            
+            # Фильтр по дате
+            if date_from_obj or date_to_obj:
+                event_date = self.parse_event_date(event_date_str)
+                if event_date is None:
+                    continue  # Нет даты - пропускаем
+                if date_from_obj and event_date < date_from_obj:
+                    continue
+                if date_to_obj and event_date > date_to_obj:
+                    continue
+            
+            # Фильтр по времени
+            if time_from_min is not None or time_to_min is not None:
+                event_time = self.parse_event_time(event_date_str)
+                if event_time is None:
+                    continue  # Нет времени - пропускаем
+                if time_from_min is not None and event_time < time_from_min:
+                    continue
+                if time_to_min is not None and event_time > time_to_min:
+                    continue
+            
+            # Фильтр по дням недели (опционально, требует расширения parse_event_date)
+            if weekdays_set:
+                event_date = self.parse_event_date(event_date_str)
+                if event_date:
+                    weekday = event_date.isoweekday()  # 1-7, где 1-пн
+                    if weekday not in weekdays_set:
+                        continue
+            
+            filtered_events.append(event)
+        
+        return filtered_events
 
 class LinearUCBRecommendationSystem:
     """
@@ -435,7 +578,7 @@ class LinearUCBRecommendationSystem:
         
         self.bandits = {}
         self.user_profiles = {}
-        
+
         print(f"✅ Инициализирована LinearUCB система")
         print(f"   Размерность признаков: {self.feature_dim}")
         print(f"   - Эмбеддинги текста: 384")
@@ -444,15 +587,52 @@ class LinearUCBRecommendationSystem:
         print(f"   - Популярность: 3")
         print(f"   - Время и дата: 14")
         print(f"   - Резерв: {self.feature_dim - 436}")
+
+    def load_bandit(self, user_id):
+        """Загружает состояние бандита для пользователя."""
+        bandit_file = f'bandit_state_{user_id}.npz'
+        if os.path.exists(bandit_file):
+            try:
+                data = np.load(bandit_file, allow_pickle=True)
+                bandit = LinearUCB(
+                    n_features=self.feature_dim,
+                    alpha=self.alpha,
+                    lambda_reg=self.lambda_reg
+                )
+                bandit.A = data['A']
+                bandit.b = data['b']
+                bandit._update_theta()
+                self.bandits[user_id] = bandit
+                print(f"✅ Бандит для пользователя {user_id} загружен с диска.")
+                return True
+            except Exception as e:
+                print(f"⚠️ Ошибка загрузки бандита {user_id}: {e}")
+        return False
+
+    def save_bandit(self, user_id):
+        """Сохраняет состояние бандита для пользователя."""
+        if user_id in self.bandits:
+            bandit = self.bandits[user_id]
+            bandit_file = f'bandit_state_{user_id}.npz'
+            try:
+                np.savez(bandit_file, A=bandit.A, b=bandit.b)
+            except Exception as e:
+                print(f"⚠️ Ошибка сохранения бандита {user_id}: {e}")
     
     def get_bandit(self, user_id):
-        """Получает или создает экземпляр LinearUCB для пользователя"""
+        """Получает или создает экземпляр LinearUCB для пользователя."""
         if user_id not in self.bandits:
-            self.bandits[user_id] = LinearUCB(
-                n_features=self.feature_dim,
-                alpha=self.alpha,
-                lambda_reg=self.lambda_reg
-            )
+            # 1. Пытаемся загрузить бандита с диска
+            if not self.load_bandit(user_id):
+                # 2. Если не вышло (новый пользователь), создаем бандита с нуля (cold start)
+                print(f"Новый пользователь {user_id}. Инициализация с нуля (cold start).")
+                new_bandit = LinearUCB(
+                    n_features=self.feature_dim,
+                    alpha=self.alpha,
+                    lambda_reg=self.lambda_reg
+                )
+                # Начинаем с нулевой матрицей и вектором (уже есть по умолчанию)
+                self.bandits[user_id] = new_bandit
         return self.bandits[user_id]
     
     def get_user_profile(self, user_id):
@@ -496,12 +676,10 @@ class LinearUCBRecommendationSystem:
                 print(f"Ошибка сохранения профиля: {e}")
     
     def reset_user_profile(self, user_id):
-        """Полностью сбрасывает профиль пользователя"""
+        """Полностью сбрасывает профиль пользователя и его модель."""
         # Удаляем из памяти
         if user_id in self.user_profiles:
             del self.user_profiles[user_id]
-        
-        # Удаляем из бандитов
         if user_id in self.bandits:
             del self.bandits[user_id]
         
@@ -514,8 +692,8 @@ class LinearUCBRecommendationSystem:
             except Exception as e:
                 print(f"Ошибка удаления профиля: {e}")
         
-        # Удаляем файл бандита (если есть)
-        bandit_file = f'bandit_{user_id}_state.json'
+        # Удаляем файл состояния бандита
+        bandit_file = f'bandit_state_{user_id}.npz'
         if os.path.exists(bandit_file):
             try:
                 os.remove(bandit_file)
@@ -532,7 +710,7 @@ class LinearUCBRecommendationSystem:
         
         event_id = event['id']
         
-        # Дизлайкнутое событие не обрабатываем
+        # Не обрабатываем события, которые уже были дизлайкнуты
         if event_id in profile['disliked_events']:
             return
         
@@ -547,15 +725,19 @@ class LinearUCBRecommendationSystem:
             profile['embedding'] = current_embedding.tolist()
         
         current_embedding = np.array(current_embedding, dtype=np.float32)
-        features = self.feature_extractor.extract_all_features(event, profile_embedding=current_embedding)
         event_embedding = self.feature_extractor.get_text_embedding(event)
+        features = self.feature_extractor.extract_all_features(event, precomputed_embedding=event_embedding)
         
-        # Бандит обновляем ВСЕГДА (и для повторных лайков тоже!)
-        bandit.update(features, reward=1 if liked else 0)
+        # Обновляем модели, используя награду -1 для дизлайков
+        reward = 1 if liked else -1
+        bandit.update(features, reward=reward)
+
+        # Сохраняем состояние бандитов на диск
+        self.save_bandit(user_id)
         
-        # Если повторный лайк - эмбеддинг не меняем
+        # Если это повторный лайк, дальше профиль не обновляем
         if is_duplicate_like:
-            print(f"📊 Повторный лайк: {event_id}, бандит обновлен")
+            print(f"📊 Повторный лайк: {event_id}, бандиты обновлены и сохранены.")
             return
         
         total_choices = profile['total_choices']
@@ -569,34 +751,26 @@ class LinearUCBRecommendationSystem:
             # ВРЕМЕННАЯ ОТЛАДКА
             print(f"\n🔥 ЛАЙК: {event['title'][:50]}...")
             print(f"   alpha={alpha:.4f}")
-            print(f"   norm_old={np.linalg.norm(current_embedding):.4f}")
-            print(f"   norm_new={np.linalg.norm(new_embedding):.4f}")
-            print(f"   event_embedding_norm={np.linalg.norm(event_embedding):.4f}")
             
             for cat in event.get('categories', []):
                 profile['preferences'][cat] = profile['preferences'].get(cat, 0) + 1
         else:
             # Дизлайк
             if event_id in profile['liked_events']:
-                # Лайк → дизлайк (отменяем лайк)
-                alpha = 1.1 / (total_choices + 2)
+                # Случай, когда пользователь отменяет свой лайк
+                alpha = 1.1 / (total_choices + 2) # Увеличиваем "вес" отмены
                 new_embedding = current_embedding - alpha * event_embedding
                 profile['liked_events'].remove(event_id)
                 for cat in event.get('categories', []):
                     profile['preferences'][cat] = max(0, profile['preferences'].get(cat, 0) - 1)
             else:
-                # Новый дизлайк
-                alpha = 0.1 / (total_choices + 2)
+                # Обычный дизлайк нового события
+                alpha = 0.1 / (total_choices + 2) # Уменьшаем "вес", чтобы не портить профиль
                 new_embedding = current_embedding - alpha * event_embedding
-                # ВРЕМЕННАЯ ОТЛАДКА
-                print(f"\n❌ ДИЗЛАЙК: {event['title'][:50]}...")
-                print(f"   alpha={alpha:.4f}")
-                print(f"   norm_old={np.linalg.norm(current_embedding):.4f}")
-                print(f"   norm_new={np.linalg.norm(new_embedding):.4f}")
             
             profile['disliked_events'].append(event_id)
         
-        # Нормализуем эмбеддинг
+        # Нормализуем эмбеддинг профиля
         norm = np.linalg.norm(new_embedding)
         profile['embedding'] = (new_embedding / norm).tolist() if norm > 0 else np.zeros(384).tolist()
         
@@ -604,52 +778,66 @@ class LinearUCBRecommendationSystem:
         self.user_profiles[user_id] = profile
         self.save_user_profile(user_id)
     
-    def get_recommendations(self, user_id, events, n=2):
+    def get_recommendations(self, user_id, events, n=20):
         """
         Возвращает топ-n событий на основе UCB score.
-        UCB сам балансирует exploration и exploitation!
         """
         bandit = self.get_bandit(user_id)
         profile = self.get_user_profile(user_id)
         
-        # Получаем эмбеддинг профиля
-        profile_embedding = profile.get('embedding')
+        # Получаем эмбеддинг профиля для передачи в feature extractor
+        profile_embedding = np.array(profile.get('embedding'))
 
-        # Фильтруем дизлайкнутые события
-        available_events = [
-            e for e in events 
-            if e['id'] not in profile['disliked_events']
-        ]
-        
+        # Фильтруем события, которые пользователь уже видел (лайкнул ИЛИ дизлайкнул)
+        seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+        available_events = [e for e in events if e['id'] not in seen_ids]
+
         if len(available_events) < n:
-            return available_events
+            n = len(available_events)
         
+        if not available_events:
+            return []
+        
+        # Для первых выборов - случайные
+        if profile['total_choices'] == 0:
+            shuffled = available_events.copy()
+            random.shuffle(shuffled)
+            recommendations = []
+            for event in shuffled[:n]:
+                event = event.copy()
+                event['_recommendation_type'] = 'random'
+                recommendations.append(event)
+            return recommendations
+
         # Вычисляем UCB score для каждого события
         scored_events = []
         for event in available_events:
-            features = self.feature_extractor.extract_all_features(event, profile_embedding)
+            event_embedding = self.feature_extractor.get_text_embedding(event)
+            features = self.feature_extractor.extract_all_features(event, precomputed_embedding=event_embedding)
             score, mean_reward, uncertainty = bandit.get_score(features)
-            # score = mean_reward + alpha * uncertainty
-            # где:
-            # - mean_reward: насколько событие похоже на профиль (exploitation)
-            # - uncertainty: насколько мы неуверены (exploration)
             
-            scored_events.append((event, score, mean_reward, uncertainty, features))
+            scored_events.append({
+                'event': event,
+                'score': score,
+                'mean_reward': mean_reward,
+                'uncertainty': uncertainty,
+                'features': features
+            })
         
         # Сортируем по UCB score
-        scored_events.sort(key=lambda x: x[1], reverse=True)
+        scored_events.sort(key=lambda x: x['score'], reverse=True)
         
-        # Возвращаем топ-n
+        # Формируем итоговый список
         recommendations = []
-        for event, score, mean_reward, uncertainty, features in scored_events[:n]:
-            event = event.copy()
-            event['_ucb_score'] = float(score)
-            event['_expected_reward'] = float(mean_reward)
-            event['_uncertainty'] = float(uncertainty)
-            event['_confidence'] = float(bandit.get_confidence(features))
+        for item in scored_events[:n]:
+            event = item['event'].copy()
+            event['_ucb_score'] = float(item['score'])
+            event['_expected_reward'] = float(item['mean_reward'])
+            event['_uncertainty'] = float(item['uncertainty'])
+            event['_confidence'] = float(bandit.get_confidence(item['features']))
+            event['_features'] = item['features'] # Сохраняем для расчета разнообразия
             
-            # Определяем тип рекомендации
-            if uncertainty > abs(mean_reward):
+            if item['uncertainty'] > abs(item['mean_reward']) * 0.8: # Более мягкое условие для exploration
                 event['_recommendation_type'] = 'exploration'
             else:
                 event['_recommendation_type'] = 'exploitation'
@@ -660,47 +848,235 @@ class LinearUCBRecommendationSystem:
 
     def get_pair_for_comparison(self, user_id, all_events):
         """
-        Возвращает пару событий для сравнения.
-        Показывает топ-1 и топ-2 по UCB score.
+        Возвращает пару РАЗНООБРАЗНЫХ событий для сравнения.
+        Одно событие - "лидер" по UCB-оценке.
+        Второе - наиболее не похожее на лидера из топ-20.
+        """
+        # 1. Получаем топ-20 кандидатов, отфильтрованных по лайкам/дизлайкам
+        candidates = self.get_recommendations(user_id, all_events, n=20)
+        
+        if len(candidates) < 2:
+            print(f"⚠️ Недостаточно кандидатов для формирования разнообразной пары ({len(candidates)} шт.)")
+            # Fallback на случайные, если есть хотя бы 2
+            profile = self.get_user_profile(user_id)
+            seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+            available = [e for e in all_events if e['id'] not in seen_ids]
+            if len(available) >= 2:
+                return np.random.choice(available, 2, replace=False).tolist()
+            return None, None
+
+        # 2. Первое событие в паре - это всегда лидер
+        leader = candidates[0]
+        
+        # Если нет features или это случайная рекомендация - не пытаемся искать diverse
+        if '_features' not in leader or leader.get('_recommendation_type') == 'random':
+            if len(candidates) >= 2:
+                return leader, candidates[1]
+            return leader, None
+
+        # 3. Ищем второго кандидата, максимально не похожего на лидера
+        diverse_candidate = None
+        max_distance = -1
+        
+        leader_features = leader['_features']
+        
+        for candidate in candidates[1:]:
+            candidate_features = candidate['_features']
+            # Косинусное расстояние = 1 - косинусное сходство
+            # Используем эмбеддинги (первые 384 признака) для расчета содержательного сходства
+            distance = 1 - np.dot(leader_features[:384], candidate_features[:384])
+            
+            if distance > max_distance:
+                max_distance = distance
+                diverse_candidate = candidate
+        
+        print(f"↔️ Сформирована разнообразная пара. Расстояние: {max_distance:.3f}")
+        
+        # Очищаем временные поля перед отправкой
+        del leader['_features']
+        if diverse_candidate and '_features' in diverse_candidate:
+             del diverse_candidate['_features']
+
+        return leader, diverse_candidate
+    
+    def get_exploitation_recommendations(self, user_id, events, n=50, min_confidence=0.6,
+                                       date_from=None, date_to=None, time_from=None, time_to=None, weekdays=None):
+        """
+        Возвращает топ-n событий на основе чистой эксплуатации (mean_reward)
+        с фильтрацией по времени
+        """
+        bandit = self.get_bandit(user_id)
+        profile = self.get_user_profile(user_id)
+        total_likes = len(profile.get('liked_events', []))
+        total_choices = profile.get('total_choices', 0)
+        
+        # Проверяем, достаточно ли данных
+        if total_choices < 5:
+            return {
+                'recommendations': [],
+                'has_enough_data': False,
+                'total_choices': total_choices,
+                'total_likes': total_likes,
+                'found_count': 0,
+                'message': f'Недостаточно данных. Сделайте еще {5 - total_choices} выборов.'
+            }
+        
+        # Фильтруем уже обработанные события
+        seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+        available_events = [e for e in events if e['id'] not in seen_ids]
+        
+        # ✅ ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ПО ВРЕМЕНИ
+        filtered_events = self.feature_extractor.filter_events_by_time(
+            available_events,
+            date_from=date_from,
+            date_to=date_to,
+            time_from=time_from,
+            time_to=time_to,
+            weekdays=weekdays
+        )
+        
+        print(f"📊 Фильтрация exploitation: было {len(available_events)} событий, осталось {len(filtered_events)}")
+        
+        if not filtered_events:
+            return {
+                'recommendations': [],
+                'has_enough_data': True,
+                'total_choices': total_choices,
+                'total_likes': total_likes,
+                'found_count': 0,
+                'message': 'Нет событий, соответствующих фильтрам'
+            }
+        
+        # Вычисляем mean_reward для каждого события
+        scored_events = []
+        for event in filtered_events:
+            try:
+                features = self.feature_extractor.extract_all_features(event)
+                _, mean_reward, uncertainty = bandit.get_score(features)
+                confidence = bandit.get_confidence(features)
+                
+                scored_events.append({
+                    'event': event,
+                    'mean_reward': mean_reward,
+                    'uncertainty': uncertainty,
+                    'confidence': confidence
+                })
+            except Exception as e:
+                print(f"Ошибка обработки события {event.get('id')}: {e}")
+                continue
+        
+        # Сортируем по mean_reward
+        scored_events.sort(key=lambda x: x['mean_reward'], reverse=True)
+        
+        # Находим min и max для нормализации
+        if scored_events:
+            all_mean_rewards = [item['mean_reward'] for item in scored_events]
+            min_reward = min(all_mean_rewards)
+            max_reward = max(all_mean_rewards)
+            
+            for item in scored_events:
+                normalized = (item['mean_reward'] - min_reward) / (max_reward - min_reward + 1e-8)
+                item['normalized_percent'] = int(normalized * 100)
+        
+        # Формируем результат
+        recommendations = []
+        for item in scored_events[:n]:
+            event = item['event'].copy()
+            event['_mean_reward'] = float(item['mean_reward'])
+            event['_uncertainty'] = float(item['uncertainty'])
+            event['_confidence'] = float(item['confidence'])
+            event['_similarity_percent'] = item.get('normalized_percent', 50)
+            event['_recommendation_type'] = 'exploitation'
+            recommendations.append(event)
+        
+        return {
+            'recommendations': recommendations,
+            'has_enough_data': True,
+            'total_choices': total_choices,
+            'total_likes': total_likes,
+            'found_count': len(recommendations),
+            'message': None
+        }
+
+    def get_cosine_recommendations(self, user_id, events, n=50, similarity_threshold=None,
+                                date_from=None, date_to=None, time_from=None, time_to=None, weekdays=None):
+        """
+        Возвращает топ-n событий на основе косинусного сходства с фильтрацией по времени
         """
         profile = self.get_user_profile(user_id)
+        profile_embedding = np.array(profile.get('embedding', np.zeros(384)))
         
-        # Получаем ID дизлайкнутых событий
-        disliked_ids = set(profile.get('disliked_events', []))
+        total_likes = len(profile.get('liked_events', []))
         
-        # Отладка
-        print(f"🔍 get_pair_for_comparison: всего событий={len(all_events)}, дизлайкнуто={len(disliked_ids)}")
+        # Проверяем, есть ли эмбеддинг профиля
+        if np.linalg.norm(profile_embedding) < 0.01 or total_likes == 0:
+            print(f"⚠️ Профиль пользователя пуст (лайков: {total_likes})")
+            return {
+                'recommendations': [],
+                'has_enough_likes': False,
+                'total_likes': total_likes,
+                'similarity_threshold': similarity_threshold
+            }
         
         # Фильтруем дизлайкнутые события
-        available_events = [
-            e for e in all_events 
-            if e['id'] not in disliked_ids
-        ]
+        disliked_ids = set(profile.get('disliked_events', []))
+        available_events = [e for e in events if e['id'] not in disliked_ids]
         
-        print(f"   доступно после фильтрации: {len(available_events)}")
+        # ПРИМЕНЯЕМ ФИЛЬТРАЦИЮ ПО ВРЕМЕНИ
+        filtered_events = self.feature_extractor.filter_events_by_time(
+            available_events,
+            date_from=date_from,
+            date_to=date_to,
+            time_from=time_from,
+            time_to=time_to,
+            weekdays=weekdays
+        )
         
-        if len(available_events) < 2:
-            print(f"⚠️ Недостаточно событий после фильтрации!")
-            return None, None
+        print(f"📊 Фильтрация: было {len(available_events)} событий, осталось {len(filtered_events)}")
         
-        # Получаем топ-2 события по UCB score
-        recommendations = self.get_recommendations(user_id, available_events, n=2)
+        if not filtered_events:
+            return {
+                'recommendations': [],
+                'has_enough_likes': total_likes >= 3,
+                'total_likes': total_likes,
+                'similarity_threshold': similarity_threshold,
+                'found_count': 0
+            }
         
-        print(f"   получено рекомендаций: {len(recommendations)}")
+        # Вычисляем косинусное сходство для отфильтрованных событий
+        scored_events = []
+        for event in filtered_events:
+            event_embedding = self.feature_extractor.get_text_embedding(event)
+            
+            similarity = np.dot(profile_embedding, event_embedding) / (
+                np.linalg.norm(profile_embedding) * np.linalg.norm(event_embedding) + 1e-8
+            )
+            
+            scored_events.append((event, similarity))
         
-        if len(recommendations) >= 2:
-            print(f"   возвращаем топ-1 и топ-2")
-            return recommendations[0], recommendations[1]
+        # Сортируем по убыванию сходства
+        scored_events.sort(key=lambda x: x[1], reverse=True)
         
-        # Fallback: случайные события из доступных
-        import random
-        if len(available_events) >= 2:
-            selected = random.sample(available_events, 2)
-            print(f"   fallback: случайные события")
-            return selected[0], selected[1]
+        top_events = scored_events[:min(n, len(scored_events))]
         
-        return None, None
-    
+        # Формируем результат
+        recommendations = []
+        for event, similarity in top_events:
+            event = event.copy()
+            event['_similarity'] = float(similarity)
+            event['_similarity_percent'] = int(similarity * 100)
+            event['_recommendation_type'] = 'cosine_similarity'
+            recommendations.append(event)
+        
+        print(f"📊 Косинусные рекомендации: найдено {len(recommendations)} событий с сходством > {similarity_threshold}")
+        
+        return {
+            'recommendations': recommendations,
+            'has_enough_likes': total_likes >= 3,
+            'total_likes': total_likes,
+            'similarity_threshold': similarity_threshold,
+            'found_count': len(recommendations)
+        }
 
     def get_model_insights(self, user_id):
         """

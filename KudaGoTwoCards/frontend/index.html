@@ -14,20 +14,26 @@
             <div class="header-content">
                 <h1 class="logo">
                     <span class="logo-icon">🎯</span>
-                    <span class="logo-text">EventChoice</span>
+                    <span class="logo-text" id="logoText">EventChoice</span>
                 </h1>
                 <div class="stats">
-                    <div class="stat">
-                        <span class="stat-icon">📊</span>
-                        <span class="stat-label">Сравнений:</span>
-                        <span class="stat-value" id="comparisonsCount">0</span>
-                    </div>
-                    <button class="btn-profile" id="profileBtn">
-                        <span>👤</span> Профиль
-                    </button>
                     <button class="btn-reset" id="resetBtn">
                         <span class="btn-icon">🔄</span>
                         Сбросить
+                    </button>
+                    <button class="btn-cosine" id="cosineBtn">
+                        <span>🔍</span> Рекомендовать события
+                    </button>
+                    <button class="btn-exploitation" id="exploitationBtn">
+                        <span>🎯</span> Лучшие для вас
+                    </button>
+                    <button class="btn-likes btn-profile" id="likesBtn">
+                        <span class="btn-icon">❤️</span>
+                        <span class="stat-label">Лайки:</span>
+                        <span class="stat-value" id="likesCount">0</span>
+                    </button>
+                    <button class="btn-profile" id="profileBtn">
+                        <span>👤</span> Профиль
                     </button>
                 </div>
             </div>
@@ -42,8 +48,12 @@
                 </div>
             </div>
 
-            <!-- Область результатов -->
+            <!-- Область результатов (UCB рекомендации) -->
             <div id="resultsArea" class="results-area" style="display: none;">
+                <button class="btn-continue" id="continueBtn">
+                    <span class="btn-icon">🎲</span>
+                    Продолжить выбор
+                </button>
                 <div class="results-header">
                     <h2>
                         <span class="results-icon">🏆</span>
@@ -54,12 +64,119 @@
                     </p>
                 </div>
                 <div id="recommendations" class="recommendations-grid"></div>
-                <button class="btn-continue" id="continueBtn">
-                    <span class="btn-icon">🎲</span>
-                    Продолжить выбор
+            </div>
+
+            <!-- Область косинусных рекомендаций (похожие события) -->
+            <div id="cosineArea" class="cosine-area" style="display: none;">
+                <button class="btn-back" id="backFromCosineBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
                 </button>
+                <div class="recommendation-actions">
+                    <button class="btn-filter" id="showFilterBtnCosine">
+                        <span>🔧</span> Настроить фильтры
+                    </button>
+                </div>
+                <div class="cosine-header">
+                    <h2>
+                        <span class="cosine-icon">🔍</span>
+                        Похожие на ваши предпочтения
+                    </h2>
+                    <p class="cosine-description">
+                        События, наиболее похожие на ваши лайки по текстовому содержанию:
+                    </p>
+                </div>
+                <div id="cosineGrid" class="recommendations-grid">
+                    <!-- Карточки похожих событий будут здесь -->
+                </div>
+            </div>
+
+            <!-- Область exploitation рекомендаций (лучшие для вас) -->
+            <div id="exploitationArea" class="exploitation-area" style="display: none;">
+                <button class="btn-back" id="backFromExploitationBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
+                <div class="recommendation-actions">
+                    <button class="btn-filter" id="showFilterBtnExploitation">
+                        <span>🔧</span> Настроить фильтры
+                    </button>
+                </div>
+                <div class="exploitation-header">
+                    <h2>
+                        <span class="exploitation-icon">🎯</span>
+                        Лучшие события для вас
+                    </h2>
+                    <p class="exploitation-description">
+                        События, которые максимально соответствуют вашему профилю на основе UCB модели:
+                    </p>
+                </div>
+                <div id="exploitationGrid" class="recommendations-grid"></div>
+            </div>
+
+            <!-- Область лайков -->
+            <div id="likesArea" class="likes-area" style="display: none;">
+                <button class="btn-back" id="backToComparisonBtn">
+                    <span class="btn-icon">↩️</span>
+                    Назад к сравнениям
+                </button>
+                <div class="likes-header">
+                    <h2>
+                        <span class="likes-icon">❤️</span>
+                        Ваши лайки
+                    </h2>
+                    <p class="likes-description">
+                        События, которые вы оценили за все время.
+                    </p>
+                </div>
+                <div id="likedEventsGrid" class="recommendations-grid">
+                    <!-- Карточки лайкнутых событий будут здесь -->
+                </div>
             </div>
         </main>
+                <!-- Модальное окно фильтров -->
+        <div id="filterModal" class="modal-overlay" style="display: none;">
+            <div class="modal-content filter-modal">
+                <div class="modal-header">
+                    <h3>🔍 Настройка рекомендаций</h3>
+                    <button class="modal-close" id="closeFilterModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="filter-group">
+                        <label>📅 Диапазон дат:</label>
+                        <div class="date-range">
+                            <input type="date" id="filterDateFrom" placeholder="от">
+                            <span>—</span>
+                            <input type="date" id="filterDateTo" placeholder="до">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>⏰ Время проведения:</label>
+                        <div class="time-range">
+                            <input type="time" id="filterTimeFrom" placeholder="от">
+                            <span>—</span>
+                            <input type="time" id="filterTimeTo" placeholder="до">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>📆 Дни недели:</label>
+                        <div class="weekdays">
+                            <label><input type="checkbox" value="1"> Пн</label>
+                            <label><input type="checkbox" value="2"> Вт</label>
+                            <label><input type="checkbox" value="3"> Ср</label>
+                            <label><input type="checkbox" value="4"> Чт</label>
+                            <label><input type="checkbox" value="5"> Пт</label>
+                            <label><input type="checkbox" value="6"> Сб</label>
+                            <label><input type="checkbox" value="7"> Вс</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button class="btn-apply" id="applyFiltersBtn">✅ Применить</button>
+                    <button class="btn-reset" id="resetFiltersBtn">🗑️ Сбросить</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
