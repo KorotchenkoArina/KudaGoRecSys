@@ -4,22 +4,24 @@
 Flask==3.0.3              
 Flask-CORS==4.0.1         
 requests==2.32.3          
+gunicorn==21.2.0
 
 # ============================================
-# ml/nlp
+# ml/nlp (совместимые версии для Render)
 # ============================================
-transformers==4.46.2      
-torch==2.5.1              
-sentence-transformers==3.0.1
-scikit-learn==1.5.2       
-numpy==1.26.4             
-scipy==1.14.1             
-safetensors==0.4.5        
-tokenizers==0.20.3        
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.2
+sentence-transformers==2.2.2
+transformers==4.38.2
+scikit-learn==1.4.2
+numpy==1.24.4
+scipy==1.13.0
+safetensors==0.4.3
+tokenizers==0.15.2
 
 # ============================================
 # additional
 # ============================================
-redis==5.2.0              
-pandas==2.2.3             
-python-dotenv==1.0.1      
+redis==5.0.1
+pandas==2.1.4
+python-dotenv==1.0.1
