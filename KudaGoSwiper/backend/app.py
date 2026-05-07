@@ -502,15 +502,22 @@ def reset_comparisons():
 
 @app.route('/api/recommendations/cosine', methods=['GET'])
 def get_cosine_recommendations():
-    """Возвращает топ-3 рекомендации на основе косинусного сходства с профилем"""
+    """Возвращает топ-1 рекомендацию на основе косинусного сходства"""
     user_id = get_or_create_user_session()
     events = load_or_refresh_cache()
     
+    # Получаем параметры фильтрации
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    time_from = request.args.get('time_from')
+    time_to = request.args.get('time_to')
+    weekdays = request.args.getlist('weekdays')
+    
     result = recommendation_system.get_cosine_recommendations(
-        user_id, events, n=3,
-        date_from=None, date_to=None,
-        time_from=None, time_to=None,
-        weekdays=None
+        user_id, events, n=1,
+        date_from=date_from, date_to=date_to,
+        time_from=time_from, time_to=time_to,
+        weekdays=[int(d) for d in weekdays] if weekdays else None
     )
     
     return jsonify({
@@ -523,16 +530,23 @@ def get_cosine_recommendations():
 
 @app.route('/api/recommendations/exploitation', methods=['GET'])
 def get_exploitation_recommendations():
-    """Возвращает топ-3 рекомендации на основе чистой эксплуатации (mean_reward)"""
+    """Возвращает топ-1 рекомендацию на основе чистой эксплуатации"""
     user_id = get_or_create_user_session()
     events = load_or_refresh_cache()
     
+    # Получаем параметры фильтрации
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    time_from = request.args.get('time_from')
+    time_to = request.args.get('time_to')
+    weekdays = request.args.getlist('weekdays')
+    
     try:
         result = recommendation_system.get_exploitation_recommendations(
-            user_id, events, n=3,
-            date_from=None, date_to=None,
-            time_from=None, time_to=None,
-            weekdays=None
+            user_id, events, n=1,
+            date_from=date_from, date_to=date_to,
+            time_from=time_from, time_to=time_to,
+            weekdays=[int(d) for d in weekdays] if weekdays else None
         )
         return jsonify({
             'success': True,
@@ -544,7 +558,6 @@ def get_exploitation_recommendations():
             'message': result.get('message')
         })
     except Exception as e:
-        print(f"Ошибка в get_exploitation_recommendations: {e}")
         return jsonify({
             'success': False,
             'error': str(e),

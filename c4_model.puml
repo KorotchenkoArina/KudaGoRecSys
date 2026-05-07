@@ -1,0 +1,46 @@
+@startuml C4_Context_Diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма системного контекста (Level 1) для KudaGoRecSys
+
+Person(user, "Пользователь", "Человек, получающий рекомендации по событиям.")
+System(rec_sys, "KudaGo Recommendation System", "Система, которая анализирует предпочтения и предлагает релевантные события.")
+
+System_Ext(kudago_api, "KudaGo API", "Внешний API для получения информации о событиях.")
+
+Rel(user, rec_sys, "Использует", "Просматривает и оценивает события (лайк/дизлайк)")
+Rel(rec_sys, user, "Показывает рекомендации")
+
+Rel_Back(rec_sys, kudago_api, "Запрашивает события", "HTTP/JSON")
+
+@enduml
+
+'----------------------------------
+
+@startuml C4_Container_Diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров (Level 2) для KudaGo Recommendation System
+
+Person(user, "Пользователь", "Человек, получающий рекомендации по событиям.")
+System_Ext(kudago_api, "KudaGo API", "Внешний API для получения информации о событиях.")
+
+System_Boundary(kuda_go_rec_sys, "KudaGo Recommendation System") {
+    Container(frontend, "Frontend", "JavaScript, HTML, CSS", "Веб-интерфейс для пользователя (KudaGoTwoCards), показывающий карточки событий.")
+    Container(backend_api, "Backend API", "Python, Flask", "Серверная часть, содержащая основную ML-логику (LinearUCBRecommendationSystem). Обрабатывает запросы на рекомендации и обновления профилей.")
+    
+    ContainerDb(profile_store, "Хранилище профилей", "Файловая система (JSON)", "Хранит лайки/дизлайки, предпочтения и текстовый эмбеддинг пользователя (linear_ucb_profile_*.json).")
+    ContainerDb(model_store, "Хранилище моделей", "Файловая система (NumPy NPZ)", "Хранит обученные веса UCB-бандитов для каждого пользователя (bandit_state_*.npz).")
+    ContainerDb(event_cache, "Кэш событий", "Файловая система (JSON, NPY)", "Хранит кэшированные данные о событиях и их эмбеддинги для быстрой работы (events_cache.json, event_embeddings_linear.npy).")
+}
+
+Rel(user, frontend, "Взаимодействует", "просмотр, лайк/дизлайк")
+Rel(frontend, backend_api, "Запрашивает данные и отправляет действия", "JSON/HTTP")
+
+Rel(backend_api, profile_store, "Читает и пишет", "обновление профиля")
+Rel(backend_api, model_store, "Читает и пишет", "обновление модели")
+Rel(backend_api, event_cache, "Читает", "получение данных для рекомендаций")
+
+Rel_Back(backend_api, kudago_api, "Запрашивает новые события", "JSON/HTTP")
+
+@enduml

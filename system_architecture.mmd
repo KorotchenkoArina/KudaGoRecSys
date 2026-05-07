@@ -1,0 +1,50 @@
+graph TD
+    subgraph "Пользователь и API"
+        UserAction("Действие пользователя (Лайк/Дизлайк)") --> API("Endpoint в app.py");
+    end
+
+    subgraph "Ядро системы: LinearUCBRecommendationSystem"
+        API --> RecSys("Главный класс системы");
+        
+        RecSys -- "Вызов update()" --> UpdatePath{"Путь обновления"};
+        RecSys -- "Вызов get_recommendations()" --> RecPath{"Путь генерации рекомендаций"};
+    end
+
+    subgraph "Хранилище данных"
+        UserProfile["(JSON-профиль пользователя)"]
+        BanditState["(NPZ-файл состояния бандита)"]
+        Events["(JSON-кэш событий)"]
+    end
+    
+    subgraph "Модуль признаков: EventFeatureExtractor"
+        FeatureExtractor("Извлекатель признаков")
+        SentenceModel("Модель эмбеддингов (SentenceTransformer)")
+        FeatureExtractor --> SentenceModel;
+    end
+
+    %% --- Путь обновления модели (когда пользователь ставит лайк/дизлайк) ---
+    UpdatePath --> FeatureExtractor;
+    FeatureExtractor -- "Вектор признаков (450d)" --> UpdatePath;
+    UpdatePath -- "Обновляет веса UCB-модели" --> BanditState;
+    UpdatePath -- "Обновляет эмбеддинг и предпочтения" --> UserProfile;
+
+    %% --- Путь генерации рекомендаций (когда пользователь запрашивает события) ---
+    RecPath --> MethodChoice{"Какой метод используется?"};
+    MethodChoice -- "UCB (Exploitation)" --> UCBPath;
+    MethodChoice -- "Cosine Similarity" --> CosinePath;
+
+    subgraph "1. UCB-путь (Exploitation/Exploration)"
+        UCBPath -- "Читает веса модели" --> BanditState;
+        UCBPath -- "Берёт все события" --> Events;
+        Events --> UCB_FE{"FeatureExtractor для каждого события"};
+        UCB_FE -- "Признаки (450d)" --> UCBPath;
+        UCBPath --> UCBRecs("🔥 Рекомендации UCB (на основе всех 450 признаков)");
+    end
+
+    subgraph "2. Cosine-путь"
+        CosinePath -- "Читает эмбеддинг профиля" --> UserProfile;
+        CosinePath -- "Берёт все события" --> Events;
+        Events --> Cosine_FE{"FeatureExtractor (только текст)"};
+        Cosine_FE -- "Текст. эмбеддинг (384d)" --> CosinePath;
+        CosinePath --> CosineRecs("🧊 Рекомендации Cosine Similarity (только на основе текста)");
+    end
