@@ -1,5 +1,3 @@
-import profile
-
 import numpy as np
 from scipy.linalg import inv
 from collections import defaultdict
@@ -691,6 +689,402 @@ class LinearUCBRecommendationSystem:
         
         return None, None
     
+    def _filter_events_by_time(self, events, date_from=None, date_to=None, 
+                                time_from=None, time_to=None, weekdays=None):
+        """
+        Фильтрует события по временным параметрам.
+        """
+        from datetime import datetime
+        import re
+        
+        # Парсим фильтры дат
+        date_from_obj = None
+        date_to_obj = None
+        if date_from:
+            try:
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            except:
+                pass
+        if date_to:
+            try:
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            except:
+                pass
+        
+        # Парсим фильтры времени
+        time_from_min = None
+        time_to_min = None
+        if time_from:
+            try:
+                parts = time_from.split(':')
+                time_from_min = int(parts[0]) * 60 + int(parts[1])
+            except:
+                pass
+        if time_to:
+            try:
+                parts = time_to.split(':')
+                time_to_min = int(parts[0]) * 60 + int(parts[1])
+            except:
+                pass
+        
+        def parse_event_date(date_str):
+            if not date_str or date_str == 'Дата не указана':
+                return None
+            try:
+                patterns = [
+                    r'(\d{1,2})\s+(\w+)\s+(\d{4})',
+                    r'(\d{2})\.(\d{2})\.(\d{4})',
+                    r'(\d{4})-(\d{2})-(\d{2})',
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, date_str)
+                    if match and len(match.groups()) == 3:
+                        day, month, year = match.groups()
+                        months = {'january': 1, 'february': 2, 'march': 3, 'april': 4, 
+                                'may': 5, 'june': 6, 'july': 7, 'august': 8,
+                                'september': 9, 'october': 10, 'november': 11, 'december': 12}
+                        if month.lower() in months:
+                            month = months[month.lower()]
+                            return datetime(int(year), int(month), int(day))
+                return None
+            except:
+                return None
+        
+        def parse_event_time(date_str):
+            if not date_str or date_str == 'Дата не указана':
+                return None
+            try:
+                time_match = re.search(r'(\d{1,2}):(\d{2})', date_str)
+                if time_match:
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2))
+                    return hour * 60 + minute
+                return None
+            except:
+                return None
+        
+        filtered_events = []
+        for event, similarity in events:
+            event_date_str = event.get('date', '')
+            
+            # Фильтр по дате
+            if date_from_obj or date_to_obj:
+                event_date = parse_event_date(event_date_str)
+                if event_date is None:
+                    continue
+                if date_from_obj and event_date < date_from_obj:
+                    continue
+                if date_to_obj and event_date > date_to_obj:
+                    continue
+            
+            # Фильтр по времени
+            if time_from_min is not None or time_to_min is not None:
+                event_time = parse_event_time(event_date_str)
+                if event_time is None:
+                    continue
+                if time_from_min is not None and event_time < time_from_min:
+                    continue
+                if time_to_min is not None and event_time > time_to_min:
+                    continue
+            
+            filtered_events.append((event, similarity))
+        
+        return filtered_events
+
+    def _filter_events_by_time_dict(self, scored_events, date_from=None, date_to=None, 
+                                  time_from=None, time_to=None, weekdays=None):
+        """
+        Фильтрует уже отсортированные события по времени.
+        scored_events: список словарей с полем 'event'
+        """
+        from datetime import datetime
+        import re
+        
+        # Парсим фильтры дат
+        date_from_obj = None
+        date_to_obj = None
+        if date_from:
+            try:
+                date_from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+            except:
+                pass
+        if date_to:
+            try:
+                date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+            except:
+                pass
+        
+        # Парсим фильтры времени
+        time_from_min = None
+        time_to_min = None
+        if time_from:
+            try:
+                parts = time_from.split(':')
+                time_from_min = int(parts[0]) * 60 + int(parts[1])
+            except:
+                pass
+        if time_to:
+            try:
+                parts = time_to.split(':')
+                time_to_min = int(parts[0]) * 60 + int(parts[1])
+            except:
+                pass
+        
+        def parse_event_date(date_str):
+            if not date_str or date_str == 'Дата не указана':
+                return None
+            try:
+                patterns = [
+                    r'(\d{1,2})\s+(\w+)\s+(\d{4})',
+                    r'(\d{2})\.(\d{2})\.(\d{4})',
+                    r'(\d{4})-(\d{2})-(\d{2})',
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, date_str)
+                    if match and len(match.groups()) == 3:
+                        day, month, year = match.groups()
+                        months = {'january': 1, 'february': 2, 'march': 3, 'april': 4, 
+                                'may': 5, 'june': 6, 'july': 7, 'august': 8,
+                                'september': 9, 'october': 10, 'november': 11, 'december': 12}
+                        if month.lower() in months:
+                            month = months[month.lower()]
+                            return datetime(int(year), int(month), int(day))
+                return None
+            except:
+                return None
+        
+        def parse_event_time(date_str):
+            if not date_str or date_str == 'Дата не указана':
+                return None
+            try:
+                time_match = re.search(r'(\d{1,2}):(\d{2})', date_str)
+                if time_match:
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2))
+                    return hour * 60 + minute
+                return None
+            except:
+                return None
+        
+        filtered_events = []
+        for item in scored_events:
+            event = item['event']
+            event_date_str = event.get('date', '')
+            
+            # Фильтр по дате
+            if date_from_obj or date_to_obj:
+                event_date = parse_event_date(event_date_str)
+                if event_date is None:
+                    continue
+                if date_from_obj and event_date < date_from_obj:
+                    continue
+                if date_to_obj and event_date > date_to_obj:
+                    continue
+            
+            # Фильтр по времени
+            if time_from_min is not None or time_to_min is not None:
+                event_time = parse_event_time(event_date_str)
+                if event_time is None:
+                    continue
+                if time_from_min is not None and event_time < time_from_min:
+                    continue
+                if time_to_min is not None and event_time > time_to_min:
+                    continue
+            
+            filtered_events.append(item)
+        
+        return filtered_events
+
+    def get_exploitation_recommendations(self, user_id, events, n=1,
+                                       date_from=None, date_to=None, time_from=None, time_to=None, weekdays=None):
+        """
+        Возвращает топ-1 событие на основе чистой эксплуатации (mean_reward)
+        с фильтрацией по времени. Сначала вычисляется mean_reward, потом фильтры.
+        """
+        bandit = self.get_bandit(user_id)
+        profile = self.get_user_profile(user_id)
+        total_likes = len(profile.get('liked_events', []))
+        total_choices = profile.get('total_choices', 0)
+        
+        # Проверяем, достаточно ли данных
+        if total_choices < 5:
+            return {
+                'recommendations': [],
+                'has_enough_data': False,
+                'total_choices': total_choices,
+                'total_likes': total_likes,
+                'found_count': 0,
+                'message': f'Недостаточно данных. Сделайте еще {5 - total_choices} оценок.'
+            }
+        
+        # Фильтруем уже обработанные события
+        seen_ids = set(profile.get('disliked_events', [])) | set(profile.get('liked_events', []))
+        available_events = [e for e in events if e['id'] not in seen_ids]
+        
+        # ШАГ 1: Вычисляем mean_reward для ВСЕХ доступных событий
+        scored_events = []
+        for event in available_events:
+            try:
+                features = self.feature_extractor.extract_all_features(event)
+                _, mean_reward, uncertainty = bandit.get_score(features)
+                confidence = bandit.get_confidence(features)
+                
+                scored_events.append({
+                    'event': event,
+                    'mean_reward': mean_reward,
+                    'uncertainty': uncertainty,
+                    'confidence': confidence
+                })
+            except Exception as e:
+                print(f"Ошибка обработки события {event.get('id')}: {e}")
+                continue
+        
+        # Сортируем по mean_reward (от большего к меньшему)
+        scored_events.sort(key=lambda x: x['mean_reward'], reverse=True)
+        
+        # ШАГ 2: Применяем фильтрацию по времени к уже отсортированным событиям
+        filtered_events = self._filter_events_by_time_dict(
+            scored_events,
+            date_from=date_from,
+            date_to=date_to,
+            time_from=time_from,
+            time_to=time_to,
+            weekdays=weekdays
+        )
+        
+        print(f"📊 Exploitation: найдено {len(filtered_events)} событий после фильтрации")
+        
+        if not filtered_events:
+            return {
+                'recommendations': [],
+                'has_enough_data': True,
+                'total_choices': total_choices,
+                'total_likes': total_likes,
+                'found_count': 0,
+                'message': 'Нет событий, соответствующих фильтрам'
+            }
+        
+        # Берём топ-1
+        top_events = filtered_events[:min(n, len(filtered_events))]
+        
+        # ✅ Нормализуем процент на основе реального mean_reward
+        if top_events:
+            mean_reward = top_events[0]['mean_reward']
+            
+            # mean_reward может быть в диапазоне [-1, 1] или [0, 1]
+            # Используем сигмоидальную нормализацию для более реалистичных процентов
+            if mean_reward >= 0:
+                # Для положительных значений: 50-100%
+                normalized = 50 + int(mean_reward * 50)
+            else:
+                # Для отрицательных значений: 0-50%
+                normalized = int((mean_reward + 1) * 50)
+            
+            # Ограничиваем от 0 до 100
+            normalized = max(0, min(100, normalized))
+            top_events[0]['normalized_percent'] = normalized
+            
+            print(f"📊 mean_reward={mean_reward:.4f} → процент={normalized}%")
+        
+        # Формируем результат
+        recommendations = []
+        for item in top_events:
+            event = item['event'].copy()
+            event['_mean_reward'] = float(item['mean_reward'])
+            event['_uncertainty'] = float(item['uncertainty'])
+            event['_confidence'] = float(item['confidence'])
+            event['_similarity_percent'] = item.get('normalized_percent', 50)
+            event['_recommendation_type'] = 'exploitation'
+            recommendations.append(event)
+        
+        return {
+            'recommendations': recommendations,
+            'has_enough_data': True,
+            'total_choices': total_choices,
+            'total_likes': total_likes,
+            'found_count': len(recommendations),
+            'message': None
+        }
+
+    def get_cosine_recommendations(self, user_id, events, n=1,
+                                date_from=None, date_to=None, time_from=None, time_to=None, weekdays=None):
+        """
+        Возвращает топ-1 событие на основе косинусного сходства с эмбеддингом профиля.
+        Сначала вычисляется процент соответствия, потом применяются фильтры по времени.
+        """
+        profile = self.get_user_profile(user_id)
+        profile_embedding = np.array(profile.get('embedding', np.zeros(384)))
+        
+        total_likes = len(profile.get('liked_events', []))
+        
+        # Проверяем, есть ли эмбеддинг профиля
+        if np.linalg.norm(profile_embedding) < 0.01 or total_likes == 0:
+            print(f"⚠️ Профиль пользователя пуст (лайков: {total_likes})")
+            return {
+                'recommendations': [],
+                'has_enough_likes': False,
+                'total_likes': total_likes,
+                'found_count': 0
+            }
+        
+        # Фильтруем дизлайкнутые события
+        disliked_ids = set(profile.get('disliked_events', []))
+        available_events = [e for e in events if e['id'] not in disliked_ids]
+        
+        # ШАГ 1: Вычисляем косинусное сходство для всех доступных событий
+        scored_events = []
+        for event in available_events:
+            event_embedding = self.feature_extractor.get_text_embedding(event)
+            
+            similarity = np.dot(profile_embedding, event_embedding) / (
+                np.linalg.norm(profile_embedding) * np.linalg.norm(event_embedding) + 1e-8
+            )
+            
+            scored_events.append((event, similarity))
+        
+        # Сортируем по убыванию сходства
+        scored_events.sort(key=lambda x: x[1], reverse=True)
+        
+        # ШАГ 2: Применяем фильтрацию по времени к уже отсортированным событиям
+        filtered_events = self._filter_events_by_time(
+            scored_events,  # ← передаём список (event, similarity)
+            date_from=date_from,
+            date_to=date_to,
+            time_from=time_from,
+            time_to=time_to,
+            weekdays=weekdays
+        )
+        
+        print(f"📊 Косинусные: найдено {len(filtered_events)} событий после фильтрации")
+        
+        if not filtered_events:
+            return {
+                'recommendations': [],
+                'has_enough_likes': total_likes >= 3,
+                'total_likes': total_likes,
+                'found_count': 0
+            }
+        
+        # Берём топ-n
+        top_events = filtered_events[:min(n, len(filtered_events))]
+        
+        # Формируем результат
+        recommendations = []
+        for event, similarity in top_events:
+            event = event.copy()
+            event['_similarity'] = float(similarity)
+            event['_similarity_percent'] = int(similarity * 100)
+            event['_recommendation_type'] = 'cosine_similarity'
+            recommendations.append(event)
+        
+        print(f"📊 Косинусные рекомендации: финальный результат {len(recommendations)} событий")
+        
+        return {
+            'recommendations': recommendations,
+            'has_enough_likes': total_likes >= 3,
+            'total_likes': total_likes,
+            'found_count': len(recommendations)
+        }
 
     def get_model_insights(self, user_id):
         """

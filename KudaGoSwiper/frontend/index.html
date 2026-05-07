@@ -17,21 +17,25 @@
                     <span class="logo-text">EventChoice</span>
                 </h1>
                 <div class="stats">
-                    <div class="stat">
-                        <span class="stat-icon">📊</span>
-                        <span class="stat-label">Оценено:</span>
-                        <span class="stat-value" id="statsTotal">0</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-icon">❤️</span>
-                        <span class="stat-label">Лайков:</span>
+                    <!-- <div class="stat"> -->
+                        <!-- <span class="stat-icon">📊</span> -->
+                        <!-- <span class="stat-label">Оценено:</span> -->
+                        <!-- <span class="stat-value" id="statsTotal">0</span> -->
+                    <!-- </div> -->
+                    <button class="btn-likes" id="likesBtn">
+                        <span class="btn-icon">❤️</span>
+                        <span class="stat-label">Лайки:</span>
                         <span class="stat-value" id="statsLikes">0</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-icon">⏳</span>
-                        <span class="stat-label">Осталось:</span>
-                        <span class="stat-value" id="statsRemaining">0</span>
-                    </div>
+                    </button>
+                    <!-- <div class="stat"> -->
+                        <!-- <span class="stat-icon">⏳</span> -->
+                        <!-- <span class="stat-label">Осталось:</span> -->
+                        <!-- <span class="stat-value" id="statsRemaining">0</span> -->
+                    <!-- </div> -->
+                    <button class="btn-exploitation" id="exploitationBtn">
+                        <span class="btn-icon">🎯</span>
+                        <span class="stat-label">Рекомендация</span>                        
+                    </button>
                     <button class="btn-profile" id="profileBtn">
                         👤
                     </button>
@@ -43,6 +47,48 @@
         </header>
 
         <main>
+            <!-- Область косинусных рекомендаций -->
+            <div id="cosineArea" class="recommendations-area" style="display: none;">
+                <button class="btn-back" id="backFromCosineBtn">← Назад к оценке</button>
+                <div class="recommendations-header">
+                    <h2><span>🔍</span> Похожие на ваши предпочтения</h2>
+                    <p>События, наиболее похожие на ваши лайки</p>
+                </div>
+                <div class="recommendation-actions">
+                    <button class="btn-filter" id="showFilterBtnCosine">
+                        <span>🔧</span> Настроить время
+                    </button>
+                </div>
+                <div id="cosineGrid" class="recommendations-grid"></div>
+            </div>
+
+            <!-- Область exploitation рекомендаций -->
+            <div id="exploitationArea" class="recommendations-area" style="display: none;">
+                <button class="btn-back" id="backFromExploitationBtn">← Назад к оценке</button>
+                <div class="recommendations-header">
+                    <h2><span>🎯</span> Лучшие события для вас</h2>
+                    <p>События, которые максимально соответствуют вашему профилю</p>
+                </div>
+                <div class="recommendation-actions">
+                    <button class="btn-filter" id="showFilterBtnExploitation">
+                        <span>🔧</span> Настроить время
+                    </button>
+                </div>
+                <div id="exploitationGrid" class="recommendations-grid"></div>
+                <button class="btn-cosine" id="cosineBtn">
+                        <span class="btn-icon">🔍</span>
+                        <span class="stat-label"><bold>Рекомендация:</bold><br>Похоже на ваши лайки</span>
+                    </button>
+            </div>
+            <!-- Область лайков -->
+            <div id="likesArea" class="recommendations-area" style="display: none;">
+                <button class="btn-back" id="backFromLikesBtn">← Назад к оценке</button>
+                <div class="recommendations-header">
+                    <h2><span>❤️</span> Ваши лайки</h2>
+                    <p>События, которые вы оценили положительно</p>
+                </div>
+                <div id="likedEventsGrid" class="recommendations-grid"></div>
+            </div>
             <!-- Состояние загрузки -->
             <div id="loadingState" class="loading-state">
                 <div class="spinner"></div>
@@ -65,9 +111,9 @@
 
         <div class="action-buttons">
             <button id="dislikeBtn" class="action-btn dislike-btn">
+                <span class="shortcut">←</span>
                 <span class="btn-icon">👎</span>
                 <span class="btn-label">Дизлайк</span>
-                <span class="shortcut">←</span>
             </button>
             <button id="likeBtn" class="action-btn like-btn">
                 <span class="btn-icon">❤️</span>
@@ -77,6 +123,50 @@
         </div>
     </div>
 
+    <!-- Модальное окно фильтров -->
+    <div id="filterModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content filter-modal">
+            <div class="modal-header">
+                <h3>🔍 Настройка рекомендаций</h3>
+                <button class="modal-close" id="closeFilterModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="filter-group">
+                    <label>📅 Диапазон дат:</label>
+                    <div class="date-range">
+                        <input type="date" id="filterDateFrom" placeholder="от">
+                        <span>—</span>
+                        <input type="date" id="filterDateTo" placeholder="до">
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>⏰ Время проведения:</label>
+                    <div class="time-range">
+                        <input type="time" id="filterTimeFrom" placeholder="от">
+                        <span>—</span>
+                        <input type="time" id="filterTimeTo" placeholder="до">
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>📆 Дни недели:</label>
+                    <div class="weekdays">
+                        <label><input type="checkbox" value="1"> Пн</label>
+                        <label><input type="checkbox" value="2"> Вт</label>
+                        <label><input type="checkbox" value="3"> Ср</label>
+                        <label><input type="checkbox" value="4"> Чт</label>
+                        <label><input type="checkbox" value="5"> Пт</label>
+                        <label><input type="checkbox" value="6"> Сб</label>
+                        <label><input type="checkbox" value="7"> Вс</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-apply" id="applyFiltersBtn">✅ Применить</button>
+                <button class="btn-reset" id="resetFiltersBtn">🗑️ Сбросить</button>
+            </div>
+        </div>
+    </div>
+    
     <script src="app.js"></script>
 </body>
 
